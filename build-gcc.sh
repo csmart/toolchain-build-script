@@ -4,15 +4,28 @@
 
 BRANCH=$1
 ENDIAN=$2
+INSTALL="${3}"
+NOCLEAN="${4}"
 
 if [[ -z "$BRANCH" || -z "$ENDIAN" ]]; then
-	echo "Usage: $0 <version|head> <big|little|both> [--install]" >&2
+	echo "Usage: $0 <version|head> <big|little|both> [--install] [--noclean]" >&2
 	exit 1
 fi
 
 set -o errexit
 set -o pipefail
 set -o nounset
+
+# Trap the EXIT call and clean up, unless --noclean is passed as argument
+function finish {
+  if [[ ! "${NOCLEAN}" ]]; then
+    echo "Cleaning up..."
+    rm -rf ${BASEDIR}
+  else
+    echo "OK, not cleaning up..."
+  fi
+}
+trap finish EXIT
 
 if [[ $ENDIAN == "big" ]]; then
 	TARGETS="--target=powerpc64-linux --enable-targets=powerpc-linux,powerpc64-linux"
@@ -77,7 +90,7 @@ cd $BASEDIR/build/gcc
 make -s all-gcc $PARALLEL
 make -s install-gcc
 
-if [[ $3 == "--install" ]]; then
+if [[ "${INSTALL}" == "--install" ]]; then
 	DESTDIR=/opt/cross/gcc-$VERSION-nolibc/$NAME/
 	mkdir -p $DESTDIR || {
 		echo "Error: can't write to $DESTDIR" >&2
@@ -86,7 +99,6 @@ if [[ $3 == "--install" ]]; then
 
 	echo "Installing to /opt/cross ..."
 	rsync -a --delete $BASEDIR/install/$NAME/ $DESTDIR
-	rm -rf $BASEDIR
 else
 	echo "Not installing, compiler is in $BASEDIR/install"
 fi
