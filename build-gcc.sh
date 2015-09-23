@@ -6,7 +6,7 @@ BRANCH=$1
 ENDIAN=$2
 
 if [[ -z "$BRANCH" || -z "$ENDIAN" ]]; then
-	echo "Usage: $0 <4|5|head> <big|little|both>" >&2
+	echo "Usage: $0 <4|5|head> <big|little|both> [--install]" >&2
 	exit 1
 fi
 
@@ -27,11 +27,6 @@ fi
 
 BASEDIR=$PWD/gcc-build-$$
 PARALLEL=-j$(nproc)
-
-function cleanup {
-	rm -rf $BASEDIR
-}
-trap cleanup EXIT
 
 mkdir $BASEDIR
 cd $BASEDIR
@@ -59,12 +54,6 @@ git clone $branch --depth=100 -q git://fs.ozlabs.ibm.com/mirror/gcc.git
 (cd gcc; git log -1)
 
 VERSION=$(< gcc/gcc/BASE-VER)
-DESTDIR=/opt/cross/gcc-$VERSION-nolibc/$NAME/
-
-mkdir -p $DESTDIR || {
-	echo "Error: can't write to $DESTDIR" >&2
-	exit 1
-}
 
 # --------------
 # Build binutils
@@ -88,8 +77,19 @@ cd $BASEDIR/build/gcc
 make -s all-gcc $PARALLEL
 make -s install-gcc
 
-echo "Installing to /opt/cross ..."
-rsync -a --delete $BASEDIR/install/$NAME/ /opt/cross/gcc-$VERSION-nolibc/$NAME/
+if [[ $3 == "--install" ]]; then
+	DESTDIR=/opt/cross/gcc-$VERSION-nolibc/$NAME/
+	mkdir -p $DESTDIR || {
+		echo "Error: can't write to $DESTDIR" >&2
+		exit 1
+	}
+
+	echo "Installing to /opt/cross ..."
+	rsync -a --delete $BASEDIR/install/$NAME/ $DESTDIR
+	rm -rf $BASEDIR
+else
+	echo "Not installing, compiler is in $BASEDIR/install"
+fi
 
 echo "=================================================="
 echo " OK"
