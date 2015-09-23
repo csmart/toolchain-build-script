@@ -6,7 +6,7 @@ BRANCH=$1
 ENDIAN=$2
 
 if [[ -z "$BRANCH" || -z "$ENDIAN" ]]; then
-	echo "Usage: $0 <4|5|head> <big|little|both> [--install]" >&2
+	echo "Usage: $0 <version|head> <big|little|both> [--install]" >&2
 	exit 1
 fi
 
@@ -40,20 +40,20 @@ mkdir -p install src build/binutils build/gcc
 # -----------------
 echo "Cloning sources ..."
 cd src
-git clone -b binutils-2_25-branch --depth=100 -q git://fs.ozlabs.ibm.com/mirror/binutils-gdb.git
-(cd binutils-gdb; git log -1)
 
-branch=""
-if [[ $BRANCH == "4" ]]; then
-	branch="-b gcc-4_9-branch"
-elif [[ $BRANCH == "5" ]]; then
-	branch="-b gcc-5-branch"
+# Get GCC first to make sure we have a version available in tags
+if [[ "${BRANCH}" != "head" ]]; then
+  branch="-b gcc-${BRANCH//\./_}-release"
 fi
 
-git clone $branch --depth=100 -q git://fs.ozlabs.ibm.com/mirror/gcc.git
+git clone $branch --depth=100 -q git://fs.ozlabs.ibm.com/mirror/gcc.git 2>/dev/null || (echo "Could not find version ${BRANCH}, sorry." ; exit 1)
 (cd gcc; git log -1)
 
 VERSION=$(< gcc/gcc/BASE-VER)
+
+# Get binutils
+git clone -b binutils-2_25-branch --depth=100 -q git://fs.ozlabs.ibm.com/mirror/binutils-gdb.git
+(cd binutils-gdb; git log -1)
 
 # --------------
 # Build binutils
