@@ -61,7 +61,7 @@ mkdir -p $DESTDIR || {
 # --------------
 echo "Building binutils ..."
 cd $BASEDIR/build/binutils
-../../src/binutils-gdb/configure --disable-gdb --disable-libdecnumber --disable-readline --disable-sim --enable-gold --prefix=$BASEDIR/install/powerpc-linux $TARGETS
+../../src/binutils-gdb/configure --disable-gdb --disable-libdecnumber --disable-readline --disable-sim --prefix=$BASEDIR/install/$NAME $TARGETS
 
 make -s $PARALLEL
 make -s install
