@@ -5,7 +5,7 @@
 BRANCH=$1
 
 if [[ -z "$BRANCH" ]]; then
-	echo "Usage: $0 <5|head>" >&2
+	echo "Usage: $0 <4|5|head>" >&2
 	exit 1
 fi
 
@@ -39,7 +39,9 @@ git clone --depth=100 -q git://fs.ozlabs.ibm.com/mirror/binutils-gdb.git
 (cd binutils-gdb; git log -1)
 
 branch=""
-if [[ $BRANCH == "5" ]]; then
+if [[ $BRANCH == "4" ]]; then
+	branch="-b gcc-4_9-branch"
+elif [[ $BRANCH == "5" ]]; then
 	branch="-b gcc-5-branch"
 fi
 
