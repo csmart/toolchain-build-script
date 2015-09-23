@@ -35,7 +35,7 @@ mkdir -p install src build/binutils build/gcc
 # -----------------
 echo "Cloning sources ..."
 cd src
-git clone --depth=100 -q git://fs.ozlabs.ibm.com/mirror/binutils-gdb.git
+git clone -b binutils-2_25-branch --depth=100 -q git://fs.ozlabs.ibm.com/mirror/binutils-gdb.git
 (cd binutils-gdb; git log -1)
 
 branch=""
