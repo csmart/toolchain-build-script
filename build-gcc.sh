@@ -62,7 +62,7 @@ else
 fi
 
 git clone -b $branch --depth=100 -q git://fs.ozlabs.ibm.com/mirror/gcc.git 2>/dev/null || (echo "Could not find version ${BRANCH}, sorry." ; exit 1)
-(cd gcc; git log -1)
+(cd gcc; git --no-pager log -1)
 
 VERSION=$(< gcc/gcc/BASE-VER)
 
