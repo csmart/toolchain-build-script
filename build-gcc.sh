@@ -56,10 +56,12 @@ cd src
 
 # Get GCC first to make sure we have a version available in tags
 if [[ "${BRANCH}" != "head" ]]; then
-  branch="-b gcc-${BRANCH//\./_}-release"
+  branch="gcc-${BRANCH//\./_}-release"
+else
+  branch="master"
 fi
 
-git clone $branch --depth=100 -q git://fs.ozlabs.ibm.com/mirror/gcc.git 2>/dev/null || (echo "Could not find version ${BRANCH}, sorry." ; exit 1)
+git clone -b $branch --depth=100 -q git://fs.ozlabs.ibm.com/mirror/gcc.git 2>/dev/null || (echo "Could not find version ${BRANCH}, sorry." ; exit 1)
 (cd gcc; git log -1)
 
 VERSION=$(< gcc/gcc/BASE-VER)
