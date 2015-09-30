@@ -8,7 +8,7 @@ INSTALL="${3}"
 NOCLEAN="${4}"
 
 if [[ -z "$BRANCH" || -z "$ENDIAN" ]]; then
-	echo "Usage: $0 <version|head> <big|little|both> [--install] [--noclean]" >&2
+	echo "Usage: $0 <version|master> <big|little|both> [--install] [--noclean]" >&2
 	exit 1
 fi
 
@@ -55,10 +55,10 @@ echo "Cloning sources ..."
 cd src
 
 # Get GCC first to make sure we have a version available in tags
-if [[ "${BRANCH}" != "head" ]]; then
+if [[ "${BRANCH}" != "master" && ! "${BRANCH}" =~ "branch" ]]; then
   branch="gcc-${BRANCH//\./_}-release"
 else
-  branch="master"
+  branch="${BRANCH}"
 fi
 
 git clone -b $branch --depth=100 -q git://fs.ozlabs.ibm.com/mirror/gcc.git 2>/dev/null || (echo "Could not find version ${BRANCH}, sorry." ; exit 1)
