@@ -9,7 +9,7 @@ NOCLEAN="${4}"
 GIT_URL="git://fs.ozlabs.ibm.com/mirror"
 BASEDIR="${PWD}/gcc-build-$$"
 PARALLEL="-j$(($(nproc) / 4))"
-
+OUTPUT="${OUTPUT:-/opt/cross/${USER}}"
 
 if [[ -z "${BRANCH}" || -z "${TARGET}" ]]; then
   cat <<EOF
@@ -73,12 +73,11 @@ case "${TARGET}" in
     NAME="x86_64-linux"
     ;;
   *)
-    echo "I don't know what target you want, sorry" ; exit 1
+    echo "I don't know what the target ${TARGET} is, sorry" ; exit 1
     ;;
 esac
 
 mkdir -p "${BASEDIR}"
-cd "${BASEDIR}"
 
 rm -rf install src build
 
@@ -88,6 +87,11 @@ mkdir -p install src build/binutils build/gcc
 # Tags follow format gcc-<version>-release, e.g. gcc-5_1_0-release
 egrep -q "${BRANCH//\./_}|gcc-${BRANCH//\./_}-release" <<< "$(git ls-remote --heads --tags ${GIT_URL}/gcc.git)" || ( echo "Could not find the version ${BRANCH}, sorry"; exit 1 )
 
+# Test if we can write to the output directory
+if [[ "${INSTALL}" == "--install" && ! -w "${OUTPUT}" ]]; then
+  echo "Error: can't write to ${OUTPUT}, sorry" >&2
+  exit 1
+fi
 # -----------------
 # Clone the sources
 # -----------------
