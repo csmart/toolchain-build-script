@@ -78,6 +78,7 @@ case "${TARGET}" in
 esac
 
 mkdir -p "${BASEDIR}"
+cd "${BASEDIR}"
 
 rm -rf install src build
 
