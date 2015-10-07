@@ -143,7 +143,7 @@ if [[ "${INSTALL}" == "--install" ]]; then
   exit 1
 }
   echo "Installing to /opt/cross ..."
-  rsync -a --delete "${BASEDIR}/install/${NAME}"/ "${DESTDIR}"
+  rsync -aH --delete "${BASEDIR}/install/${NAME}"/ "${DESTDIR}"
 else
   if [[ "${NOCLEAN}" ]]; then
     echo "Not installing, compiler is in ${BASEDIR}/install"
