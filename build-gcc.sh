@@ -2,58 +2,169 @@
 #
 # Based on https://github.com/antonblanchard/jenkins-scripts/blob/master/gcc_kernel_build.sh
 
-BRANCH="${1}"
-TARGET="${2}"
-INSTALL="${3}"
-NOCLEAN="${4}"
-GIT_URL="git://fs.ozlabs.ibm.com/mirror"
-BASEDIR="${PWD}/gcc-build-$$"
-PARALLEL="-j$(($(nproc) / 4))"
-OUTPUT="${OUTPUT:-/opt/cross/${USER}}"
+#------
+# DEBUG
+#------
 
-if [[ -z "${BRANCH}" || -z "${TARGET}" ]]; then
-  cat <<EOF
-Usage: $0 <version> <target> [--install] [--noclean]
-
---version   tag or a branch from the GCC git tree
---target    as supported by GCC, e.g arm|aarch64|ppc|ppc64|ppc64le|sparc64
-Note: "ppc" builds a gcc which supports both ppc64 and ppc64le
---install   copy to /opt/cross/${USER}/gcc-<version>-nolibc/
---noclean   keep the temporary build directory once complete
-
-Example: $0 5.2.0 ppc64le --install
-EOF
-  exit 1
-fi
-
+#set -x
 set -o errexit
 set -o pipefail
 set -o nounset
 
-# Trap the EXIT call and clean up, unless --noclean is passed as argument
-function finish {
-if [[ ! "${NOCLEAN}" ]]; then
-  echo "Cleaning up..."
-  rm -rf "${BASEDIR}"
-else
-  echo "Temporary build dir still available at ${BASEDIR}"
-fi
+#---------
+# VARIABLES
+#----------
+
+# Defaults, can be overridden with env or args
+BASEDIR="${BASEDIR:-${PWD}/gcc-build-$$}"
+CLEAN="${CLEAN:-false}"
+GIT_URL="${GIT_URL:-git://fs.ozlabs.ibm.com/mirror}"
+INSTALL="${INSTALL:-false}"
+JOBS="${JOBS:--j$(($(nproc) / 4))}"
+# No defaults for these two
+TARGET="${TARGET:-}"
+VERSION="${VERSION:-}"
+# Used internally to know that we've successfully created BASEDIR
+BASE=""
+
+#----------
+# FUNCTIONS
+#----------
+
+# Print usage and quit
+usage() {
+  cat << EOF
+Usage: $0 --version <version> --target <target> [options]
+
+Required args:
+  --version <num>     version of GCC to build, e.g. 5.2.0
+                      Can also be git tag or branch, we look for tags first
+  --target <string>   gcc target to build, as supported by gcc
+                      E.g., arm|aarch64|ppc|ppc64|ppc64le|sparc64|x86|x86_64
+
+Options:
+  --basedir <dir>     directory to use for build
+  --clean             delete the build in basedir (consider using with --install)
+  --git <url>         URL of git mirror to use, default git://fs/mirror
+  --install <dir>     install the build to specified dir (consider using with --clean)
+  --jobs <num>        number of jobs to pass to make -j, will default to $(($(nproc) / 4))
+  --help              show this help message
+
+Short Options:
+  -b <dir>            Same as --basedir <dir>
+  -c                  Same as --clean
+  -g <url>            Same as --git <url>
+  -i <dir>            Same as --install <dir>
+  -j <num>            Same as --jobs <num>
+  -h                  Same as --help
+
+EOF
+  exit 1
+}
+
+# Trap the EXIT call, clean up if required
+finish() {
+  if [[ "${CLEAN}" == "true" && "${BASE}" ]]; then
+    echo "Cleaning up basedir in ${BASEDIR}"
+    rm -rf "${BASEDIR:?}"/{install,src,build}
+  elif [[ "${BASE}" ]]; then
+    echo "Build dir still available under ${BASEDIR}"
+  fi
 }
 trap finish EXIT
 
+# Countdown to give user a chance to exit
+countdown() {
+  i=5
+  while [[ "${i}" -ne 0 ]]; do
+    sleep 1
+    echo -n "${i}.. "
+    i=$(( i - 1 ))
+  done
+  sleep 1
+}
 
-# Work out the targets for GCC
+# Print summary of the build for the user
+print_summary() {
+  echo " * GCC ${VERSION} for ${NAME}"
+  echo " * From ${branch} on ${GIT_URL}"
+  if [[ "${INSTALL}" != "false" ]]; then
+    echo -e " * Install to:\n\t${INSTALL}/gcc-${VERSION}-nolibc/${NAME}/"
+  fi
+  echo -n " * Build dir "
+  if [[ "${CLEAN}" == "true" ]]; then
+    echo -n "(to be cleaned) "
+  fi
+  echo -e "at: \n\t${BASEDIR}\n"
+}
+
+#------------------------
+# PARSE COMMAND LINE ARGS
+#------------------------
+
+CMD_LINE=$(getopt -o b:cg:hi:j:t:v: --longoptions basedir:,clean,git:,help,install:,jobs:,target:,version: -n "$0" -- "$@")
+eval set -- "${CMD_LINE}"
+
+while true ; do
+  case "${1}" in
+    -b|--basedir)
+      BASEDIR="${2}"
+      shift 2
+      ;;
+    -c|--clean)
+      CLEAN=true
+      shift
+      ;;
+    -g|--git)
+      GIT_URL="${2}"
+      shift 2
+      ;;
+    -i|--install)
+      INSTALL="${2}"
+      shift 2
+      ;;
+    -j|--jobs)
+      JOBS="${2}"
+      shift 2
+      ;;
+    -t|--target)
+      TARGET="${2}"
+      shift 2
+      ;;
+    -v|--version)
+      VERSION="${2}"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      ;;
+    --)
+      shift
+      break
+      ;;
+    *)
+      usage
+      ;;
+  esac
+done
+
+#---------------
+# TESTS & CHECKS
+#---------------
+
+# Make sure we have required args
+if [[ -z "${VERSION}" || -z "${TARGET}" ]]; then
+  usage
+fi
+
+# Work out the targets for GCC, if it's ppc or arm then we need to set the targets appropriately
 case "${TARGET}" in
-  "aarch64")
-    TARGETS="--target=aarch64-linux-gnueabi --enable-targets=all"
-    NAME="aarch64-linux"
-    ;;
   "arm")
     TARGETS="--target=arm-linux-gnueabi --enable-targets=all"
     NAME="arm-linux"
     ;;
   "ppc")
-    TARGETS="--target=powerpc-linux --enable-targets=powerpc-linux,powerpc64-linux,powerpcle-linux,powerpc64le-linux"
+    TARGETS="--target=powerpc-linux --enable-targets=all"
     NAME="powerpc-linux"
     ;;
   "ppc64")
@@ -64,95 +175,120 @@ case "${TARGET}" in
     TARGETS="--target=powerpc64le-linux --enable-targets=powerpcle-linux,powerpc64le-linux"
     NAME="powerpc64le-linux"
     ;;
-  "sparc64")
-    TARGETS="--target=sparc64-linux --enable-targets=all"
-    NAME="sparc64-linux"
-    ;;
-  "x86_64")
-    TARGETS="--target=x86_64-linux --enable-targets=all"
-    NAME="x86_64-linux"
-    ;;
   *)
-    echo "I don't know what the target ${TARGET} is, sorry" ; exit 1
+    TARGETS="--target=${TARGET}-linux --enable-targets=all"
+    NAME="${TARGET}-linux"
     ;;
 esac
 
-mkdir -p "${BASEDIR}"
-cd "${BASEDIR}"
+# Test that we can talk to both git servers before continuing
+[[ "$(git ls-remote --tags --heads "${GIT_URL}"/gcc.git 2>/dev/null)" ]] || ( echo "ERROR: Couldn't contact gcc git server" ; exit 1 )
+[[ "$(git ls-remote --tags --heads "${GIT_URL}"/binutils-gdb.git 2>/dev/null)" ]] || ( echo "ERROR: Couldn't contact binutils git server" ; exit 1 )
 
-rm -rf install src build
+# Get a list of all tags and branches from the specified git server
+gitlist=($(git ls-remote --tags --heads "${GIT_URL}"/gcc.git 2>/dev/null |awk -F "/" '{print $NF}' |sort |uniq))
 
-mkdir -p install src build/binutils build/gcc
+# Error if we couldn't get tags or branches from git server
+if [[ "${#gitlist[*]}" -eq 0 ]]; then
+  # We didn't find anything
+  echo "ERROR: Couldn't get anything from the git server at ${GIT_URL}"
+  exit 1
+fi
 
 # Check if we have the version specified in either a tag or branch
 # Tags follow format gcc-<version>-release, e.g. gcc-5_1_0-release
-egrep -q "${BRANCH//\./_}|gcc-${BRANCH//\./_}-release" <<< "$(git ls-remote --heads --tags ${GIT_URL}/gcc.git)" || ( echo "Could not find the version ${BRANCH}, sorry"; exit 1 )
+branch=""
+for i in "${!gitlist[@]}"; do
+  if [[ "${gitlist[i]}" == "gcc-${VERSION//\./_}-release" ]]; then
+    branch="gcc-${VERSION//\./_}-release"
+    break
+  elif [[ "${gitlist[i]}" == "${VERSION}" ]]; then
+    branch="${VERSION}"
+    break
+  fi
+done
 
-# Test if we can write to the output directory
-if [[ "${INSTALL}" == "--install" && ! -w "${OUTPUT}" ]]; then
-  echo "Error: can't write to ${OUTPUT}, sorry" >&2
+# Else we can't find what we're looking for
+if [[ -z "${branch}" ]]; then
+  echo "Could not find the version, ${VERSION}"
   exit 1
 fi
-# -----------------
+
+# Warn if we will clean the build and not install it. Don't pause for answer, just let user cancel.
+if [[ "${CLEAN}" == "true" && "${INSTALL}" == "false" ]]; then
+  echo "WARNING: You want to clean the build and you're not installing it either."
+  echo "Are you sure?"
+  echo -e "\nContinuing in.."
+  countdown
+  echo -e "OK, continuing..\n"
+fi
+
+# Test if we can write to the install directory before we go to the trouble of building everything
+if [[ "${INSTALL}" != "false" &&  ! -d "${INSTALL}" ]]; then
+  echo "ERROR: Install dir doesn't seem to exist at ${INSTALL}"
+  exit 1
+elif [[ "${INSTALL}" != "false" &&  ! -w "${INSTALL}" ]]; then
+  echo "ERROR: Can't write to install dir at ${INSTALL}"
+  exit 1
+fi
+
+# Test and make our build directory
+mkdir -p "${BASEDIR}" 2>/dev/null || ( echo "ERROR: Couldn't make the basedir at ${BASEDIR}" ; exit 1 )
+BASE="true"
+cd "${BASEDIR}"
+rm -rf install src build
+mkdir -p install src build/binutils build/gcc
+
+# Print a summary of what we're going to try and do
+echo "We're building:"
+print_summary
+echo -e "\n\"On my mark...\""
+countdown
+echo -e "\n\"Engage!\"\n"
+
+#-------------
+# DO THE BUILD
+#-------------
+
 # Clone the sources
-# -----------------
 echo "Cloning sources ..."
 cd src
 
-# Get GCC first to make sure we have a version available in tags
-if [[ "${BRANCH}" != "master" && ! "${BRANCH}" =~ branch ]]; then
-  branch="gcc-${BRANCH//\./_}-release"
-else
-  branch="${BRANCH}"
-fi
-
-git clone -b "${branch}" --depth=100 -q ${GIT_URL}/gcc.git 2>/dev/null || ( echo "Failed to clone git repo, exiting." ; exit 1 )
-( cd gcc; git --no-pager log -1 )
+# We have a branch, so let's continue
+git clone -b "${branch}" --depth=100 -q "${GIT_URL}"/gcc.git 2>/dev/null || ( echo "Failed to clone gcc git repo, exiting." ; exit 1 ) && ( cd gcc; git --no-pager log -1 )
 
 VERSION="$(< gcc/gcc/BASE-VER)"
 
 # Get binutils
-git clone -b binutils-2_25-branch --depth=100 -q "${GIT_URL}/binutils-gdb.git"
-( cd binutils-gdb; git log -1 )
+git clone -b binutils-2_25-branch --depth=100 -q "${GIT_URL}"/binutils-gdb.git || ( echo "Failed to clone binutils git repo, exiting." ; exit 1 ) && ( cd binutils-gdb; git log -1 )
 
-# --------------
 # Build binutils
-# --------------
 echo "Building binutils ..."
 cd "${BASEDIR}/build/binutils"
 ../../src/binutils-gdb/configure --disable-gdb --disable-libdecnumber --disable-readline --disable-sim --prefix="${BASEDIR}/install/${NAME}" ${TARGETS}
 
-make -s "${PARALLEL}"
+make -s "${JOBS}"
 make -s install
 
-# ---------
 # Build gcc
-# ---------
 echo "Building gcc ..."
 cd "${BASEDIR}/build/gcc"
-
 ../../src/gcc/configure --prefix="${BASEDIR}/install/${NAME}" --disable-multilib --disable-bootstrap --enable-languages=c ${TARGETS}
 
 # We don't need libgcc for building the kernel, so keep it simple
-make -s all-gcc "${PARALLEL}"
+make -s all-gcc "${JOBS}"
 make -s install-gcc
 
-if [[ "${INSTALL}" == "--install" ]]; then
-  DESTDIR="/opt/cross/${USER}/gcc-${VERSION}-nolibc/${NAME}/"
-  mkdir -p "${DESTDIR}" || {
-  echo "Error: can't write to ${DESTDIR}" >&2
-  exit 1
-}
-  echo "Installing to /opt/cross ..."
+# Install if specified
+if [[ "${INSTALL}" != "false" ]]; then
+  DESTDIR="${INSTALL}/gcc-${VERSION}-nolibc/${NAME}/"
+  mkdir -p "${DESTDIR}" || ( echo "Error: can't write to install dir, ${DESTDIR}"; exit 1 )
+  echo "Installing to ${DESTDIR}..."
   rsync -aH --delete "${BASEDIR}/install/${NAME}"/ "${DESTDIR}"
-else
-  if [[ "${NOCLEAN}" ]]; then
-    echo "Not installing, compiler is in ${BASEDIR}/install"
-  fi
-  echo "Ahh, you didn't want me to install it and I'm cleaning up. I guess it built, at least."
 fi
 
-echo "=================================================="
-echo " OK"
-echo "=================================================="
+# Print summary
+echo "We built:"
+print_summary
+
 exit 0
