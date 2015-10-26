@@ -21,7 +21,8 @@ CLEAN="${CLEAN:-false}"
 GIT_URL="${GIT_URL:-git://fs.ozlabs.ibm.com/mirror}"
 INSTALL="${INSTALL:-false}"
 JOBS="${JOBS:--j$(($(nproc) / 4))}"
-REFERENCE="${REFERENCE:-}"
+GCC_REFERENCE="${REFERENCE:-}"
+BINUTILS_REFERENCE="${REFERENCE:-}"
 # No defaults for these two
 TARGET="${TARGET:-}"
 VERSION="${VERSION:-}"
@@ -49,7 +50,7 @@ Options:
   --git <url>         URL of git mirror to use, default git://fs/mirror
   --install <dir>     install the build to specified dir (consider using with --clean)
   --jobs <num>        number of jobs to pass to make -j, will default to $(($(nproc) / 4))
-  --reference <url>   reference existing repo in clone
+  --reference <url>   parent dir for existing repo for clones, e.g. /var/lib/jenkins/git
   --help              show this help message
 
 Short Options:
@@ -131,7 +132,8 @@ while true ; do
       shift 2
       ;;
     -r|--reference)
-      REFERENCE="--reference ${2}"
+      GCC_REFERENCE="--reference ${2}/gcc.git"
+      BINUTILS_REFERENCE="--reference ${2}/binutils-gdb.git"
       shift 2
       ;;
     -t|--target)
@@ -269,12 +271,12 @@ echo "Cloning sources ..."
 cd src
 
 # We have a branch, so let's continue
-git clone ${REFERENCE} -b "${branch}" --depth=10 -q "${GIT_URL}"/gcc.git 2>/dev/null || ( echo "Failed to clone gcc git repo, exiting." ; exit 1 ) && ( cd gcc; git --no-pager log -1 )
+git clone ${GCC_REFERENCE} -b "${branch}" --depth=10 -q "${GIT_URL}"/gcc.git 2>/dev/null || ( echo "Failed to clone gcc git repo, exiting." ; exit 1 ) && ( cd gcc; git --no-pager log -1 )
 
 VERSION="$(< gcc/gcc/BASE-VER)"
 
 # Get binutils
-git clone -b binutils-2_25-branch --depth=10 -q "${GIT_URL}"/binutils-gdb.git || ( echo "Failed to clone binutils git repo, exiting." ; exit 1 ) && ( cd binutils-gdb; git log -1 )
+git clone ${BINUTILS_REFERENCE} -b binutils-2_25-branch --depth=10 -q "${GIT_URL}"/binutils-gdb.git || ( echo "Failed to clone binutils git repo, exiting." ; exit 1 ) && ( cd binutils-gdb; git log -1 )
 
 # Build binutils
 echo "Building binutils ..."
