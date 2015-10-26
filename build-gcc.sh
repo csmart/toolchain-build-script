@@ -21,6 +21,7 @@ CLEAN="${CLEAN:-false}"
 GIT_URL="${GIT_URL:-git://fs.ozlabs.ibm.com/mirror}"
 INSTALL="${INSTALL:-false}"
 JOBS="${JOBS:--j$(($(nproc) / 4))}"
+REFERENCE="${REFERENCE:-}"
 # No defaults for these two
 TARGET="${TARGET:-}"
 VERSION="${VERSION:-}"
@@ -48,6 +49,7 @@ Options:
   --git <url>         URL of git mirror to use, default git://fs/mirror
   --install <dir>     install the build to specified dir (consider using with --clean)
   --jobs <num>        number of jobs to pass to make -j, will default to $(($(nproc) / 4))
+  --reference <url>   reference existing repo in clone
   --help              show this help message
 
 Short Options:
@@ -56,6 +58,7 @@ Short Options:
   -g <url>            Same as --git <url>
   -i <dir>            Same as --install <dir>
   -j <num>            Same as --jobs <num>
+  -r <url>            Same as --ref <url>
   -h                  Same as --help
 
 EOF
@@ -102,7 +105,7 @@ print_summary() {
 # PARSE COMMAND LINE ARGS
 #------------------------
 
-CMD_LINE=$(getopt -o b:cg:hi:j:t:v: --longoptions basedir:,clean,git:,help,install:,jobs:,target:,version: -n "$0" -- "$@")
+CMD_LINE=$(getopt -o b:cg:hi:j:r:t:v: --longoptions basedir:,clean,git:,help,install:,jobs:,reference:,target:,version: -n "$0" -- "$@")
 eval set -- "${CMD_LINE}"
 
 while true ; do
@@ -125,6 +128,10 @@ while true ; do
       ;;
     -j|--jobs)
       JOBS="${2}"
+      shift 2
+      ;;
+    -r|--reference)
+      REFERENCE="--reference ${2}"
       shift 2
       ;;
     -t|--target)
@@ -262,7 +269,7 @@ echo "Cloning sources ..."
 cd src
 
 # We have a branch, so let's continue
-git clone -b "${branch}" --depth=10 -q "${GIT_URL}"/gcc.git 2>/dev/null || ( echo "Failed to clone gcc git repo, exiting." ; exit 1 ) && ( cd gcc; git --no-pager log -1 )
+git clone ${REFERENCE} -b "${branch}" --depth=10 -q "${GIT_URL}"/gcc.git 2>/dev/null || ( echo "Failed to clone gcc git repo, exiting." ; exit 1 ) && ( cd gcc; git --no-pager log -1 )
 
 VERSION="$(< gcc/gcc/BASE-VER)"
 
