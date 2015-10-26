@@ -157,6 +157,13 @@ if [[ -z "${VERSION}" || -z "${TARGET}" ]]; then
   usage
 fi
 
+# If builddir isn't a full-path, exit
+if [[ "${BASEDIR:0:1}" != "/" ]]; then
+  echo "Basedir is not a full path, using this instead:"
+  echo -e "$(pwd)/${BASEDIR}\n"
+  BASEDIR="$(pwd)/${BASEDIR}"
+fi
+
 # Work out the targets for GCC, if it's ppc or arm then we need to set the targets appropriately
 case "${TARGET}" in
   "arm")
@@ -255,12 +262,12 @@ echo "Cloning sources ..."
 cd src
 
 # We have a branch, so let's continue
-git clone -b "${branch}" --depth=100 -q "${GIT_URL}"/gcc.git 2>/dev/null || ( echo "Failed to clone gcc git repo, exiting." ; exit 1 ) && ( cd gcc; git --no-pager log -1 )
+git clone -b "${branch}" --depth=10 -q "${GIT_URL}"/gcc.git 2>/dev/null || ( echo "Failed to clone gcc git repo, exiting." ; exit 1 ) && ( cd gcc; git --no-pager log -1 )
 
 VERSION="$(< gcc/gcc/BASE-VER)"
 
 # Get binutils
-git clone -b binutils-2_25-branch --depth=100 -q "${GIT_URL}"/binutils-gdb.git || ( echo "Failed to clone binutils git repo, exiting." ; exit 1 ) && ( cd binutils-gdb; git log -1 )
+git clone -b binutils-2_25-branch --depth=10 -q "${GIT_URL}"/binutils-gdb.git || ( echo "Failed to clone binutils git repo, exiting." ; exit 1 ) && ( cd binutils-gdb; git log -1 )
 
 # Build binutils
 echo "Building binutils ..."
