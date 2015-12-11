@@ -124,7 +124,7 @@ while true ; do
       shift 2
       ;;
     -j|--jobs)
-      JOBS="${2}"
+      JOBS="-j ${2}"
       shift 2
       ;;
     -t|--target)
@@ -267,7 +267,7 @@ echo "Building binutils ..."
 cd "${BASEDIR}/build/binutils"
 ../../src/binutils-gdb/configure --disable-gdb --disable-libdecnumber --disable-readline --disable-sim --prefix="${BASEDIR}/install/${NAME}" ${TARGETS}
 
-make -s "${JOBS}"
+make -s ${JOBS}
 make -s install
 
 # Build gcc
@@ -276,7 +276,7 @@ cd "${BASEDIR}/build/gcc"
 ../../src/gcc/configure --prefix="${BASEDIR}/install/${NAME}" --disable-multilib --disable-bootstrap --enable-languages=c ${TARGETS}
 
 # We don't need libgcc for building the kernel, so keep it simple
-make -s all-gcc "${JOBS}"
+make -s all-gcc ${JOBS}
 make -s install-gcc
 
 # Install if specified
