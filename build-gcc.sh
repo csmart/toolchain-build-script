@@ -21,6 +21,8 @@ CLEAN="${CLEAN:-false}"
 GIT_URL="${GIT_URL:-git://fs.ozlabs.ibm.com/mirror}"
 INSTALL="${INSTALL:-false}"
 JOBS="${JOBS:--j$(($(nproc) / 4))}"
+GCC_REFERENCE="${REFERENCE:-}"
+BINUTILS_REFERENCE="${REFERENCE:-}"
 # No defaults for these two
 TARGET="${TARGET:-}"
 VERSION="${VERSION:-}"
@@ -48,6 +50,7 @@ Options:
   --git <url>         URL of git mirror to use, default git://fs/mirror
   --install <dir>     install the build to specified dir (consider using with --clean)
   --jobs <num>        number of jobs to pass to make -j, will default to $(($(nproc) / 4))
+  --reference <url>   parent dir for existing repo for clones, e.g. /var/lib/jenkins/git
   --help              show this help message
 
 Short Options:
@@ -56,6 +59,7 @@ Short Options:
   -g <url>            Same as --git <url>
   -i <dir>            Same as --install <dir>
   -j <num>            Same as --jobs <num>
+  -r <url>            Same as --ref <url>
   -h                  Same as --help
 
 EOF
@@ -102,7 +106,7 @@ print_summary() {
 # PARSE COMMAND LINE ARGS
 #------------------------
 
-CMD_LINE=$(getopt -o b:cg:hi:j:t:v: --longoptions basedir:,clean,git:,help,install:,jobs:,target:,version: -n "$0" -- "$@")
+CMD_LINE=$(getopt -o b:cg:hi:j:r:t:v: --longoptions basedir:,clean,git:,help,install:,jobs:,reference:,target:,version: -n "$0" -- "$@")
 eval set -- "${CMD_LINE}"
 
 while true ; do
@@ -125,6 +129,11 @@ while true ; do
       ;;
     -j|--jobs)
       JOBS="-j ${2}"
+      shift 2
+      ;;
+    -r|--reference)
+      GCC_REFERENCE="--reference ${2}/gcc.git"
+      BINUTILS_REFERENCE="--reference ${2}/binutils-gdb.git"
       shift 2
       ;;
     -t|--target)
@@ -155,6 +164,13 @@ done
 # Make sure we have required args
 if [[ -z "${VERSION}" || -z "${TARGET}" ]]; then
   usage
+fi
+
+# If builddir isn't a full-path, exit
+if [[ "${BASEDIR:0:1}" != "/" ]]; then
+  echo "Basedir is not a full path, using this instead:"
+  echo -e "$(pwd)/${BASEDIR}\n"
+  BASEDIR="$(pwd)/${BASEDIR}"
 fi
 
 # Work out the targets for GCC, if it's ppc or arm then we need to set the targets appropriately
@@ -255,12 +271,12 @@ echo "Cloning sources ..."
 cd src
 
 # We have a branch, so let's continue
-git clone -b "${branch}" --depth=100 -q "${GIT_URL}"/gcc.git 2>/dev/null || ( echo "Failed to clone gcc git repo, exiting." ; exit 1 ) && ( cd gcc; git --no-pager log -1 )
+git clone ${GCC_REFERENCE} -b "${branch}" --depth=10 -q "${GIT_URL}"/gcc.git 2>/dev/null || ( echo "Failed to clone gcc git repo, exiting." ; exit 1 ) && ( cd gcc; git --no-pager log -1 )
 
 VERSION="$(< gcc/gcc/BASE-VER)"
 
 # Get binutils
-git clone -b binutils-2_25-branch --depth=100 -q "${GIT_URL}"/binutils-gdb.git || ( echo "Failed to clone binutils git repo, exiting." ; exit 1 ) && ( cd binutils-gdb; git log -1 )
+git clone ${BINUTILS_REFERENCE} -b binutils-2_25-branch --depth=10 -q "${GIT_URL}"/binutils-gdb.git || ( echo "Failed to clone binutils git repo, exiting." ; exit 1 ) && ( cd binutils-gdb; git log -1 )
 
 # Build binutils
 echo "Building binutils ..."
