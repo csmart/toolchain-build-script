@@ -276,7 +276,7 @@ git clone ${GCC_REFERENCE} -b "${branch}" --depth=10 -q "${GIT_URL}"/gcc.git 2>/
 VERSION="$(< gcc/gcc/BASE-VER)"
 
 # Get binutils
-git clone ${BINUTILS_REFERENCE} -b binutils-2_25-branch --depth=10 -q "${GIT_URL}"/binutils-gdb.git || ( echo "Failed to clone binutils git repo, exiting." ; exit 1 ) && ( cd binutils-gdb; git log -1 )
+git clone ${BINUTILS_REFERENCE} -b binutils-2_25-branch --depth=10 -q "${GIT_URL}"/binutils-gdb.git || ( echo "Failed to clone binutils git repo, exiting." ; exit 1 ) && ( cd binutils-gdb; git --no-pager log -1 )
 
 # Build binutils
 echo "Building binutils ..."
