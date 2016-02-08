@@ -6,7 +6,9 @@
 # DEBUG
 #------
 
-#set -x
+if grep -q debug <<< $@; then
+  set -x
+fi
 set -o errexit
 set -o pipefail
 set -o nounset
