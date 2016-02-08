@@ -47,6 +47,7 @@ Required args:
 Options:
   --basedir <dir>     directory to use for build
   --clean             delete the build in basedir (consider using with --install)
+  --debug             run with set -x
   --git <url>         URL of git mirror to use, default git://fs/mirror
   --install <dir>     install the build to specified dir (consider using with --clean)
   --jobs <num>        number of jobs to pass to make -j, will default to $(($(nproc) / 4))
@@ -56,6 +57,7 @@ Options:
 Short Options:
   -b <dir>            Same as --basedir <dir>
   -c                  Same as --clean
+  -d                  Same as --debug
   -g <url>            Same as --git <url>
   -i <dir>            Same as --install <dir>
   -j <num>            Same as --jobs <num>
@@ -106,7 +108,7 @@ print_summary() {
 # PARSE COMMAND LINE ARGS
 #------------------------
 
-CMD_LINE=$(getopt -o b:cg:hi:j:r:t:v: --longoptions basedir:,clean,git:,help,install:,jobs:,reference:,target:,version: -n "$0" -- "$@")
+CMD_LINE=$(getopt -o b:cdg:hi:j:r:t:v: --longoptions basedir:,clean,debug,git:,help,install:,jobs:,reference:,target:,version: -n "$0" -- "$@")
 eval set -- "${CMD_LINE}"
 
 while true ; do
@@ -117,6 +119,10 @@ while true ; do
       ;;
     -c|--clean)
       CLEAN=true
+      shift
+      ;;
+    -d|--debug)
+      set -x
       shift
       ;;
     -g|--git)
