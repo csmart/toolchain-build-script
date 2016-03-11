@@ -390,7 +390,7 @@ echo -e "\n\"Engage!\"\n"
 #-------------
 
 # Clone the sources
-cd src
+cd "${BASEDIR}/src"
 
 if [[ -n "${LOCAL}" ]]; then
 	echo "Linking existing sources..."
@@ -399,13 +399,16 @@ if [[ -n "${LOCAL}" ]]; then
 else
 	echo "Cloning sources..."
 	# We have a branch, so let's continue
-	git clone ${GCC_REFERENCE} -b "${branch}" --depth=1 -q "${GIT_URL_GCC}" 2>/dev/null || { echo "Failed to clone gcc git repo, exiting." ; exit 1 ; } && ( cd gcc; echo -e "\nLatest GCC commit:\n" ; git --no-pager log -1 )
+	git clone ${GCC_REFERENCE} -b "${branch}" --depth=1 -q "${GIT_URL_GCC}" 2>/dev/null || { echo "Failed to clone gcc git repo, exiting." ; exit 1 ; } && ( cd gcc; echo -e "\nLatest GCC commit:\n" ; git --no-pager log -1)
 	# Get binutils
 	git clone ${BINUTILS_REFERENCE} -b "${branch_binutils}" --depth=1 -q "${GIT_URL_BINUTILS}" || { echo "Failed to clone binutils git repo, exiting." ; exit 1 ; } && ( cd binutils-gdb; echo -e "\nLatest binutils commit:\n" ; git --no-pager log -1 )
 fi
 
+cd "${BASEDIR}/src/gcc" && GCC_SHA1="$(git rev-parse HEAD)"
+cd "${BASEDIR}/src/binutils-gdb" && BINUTILS_SHA1="$(git rev-parse HEAD)"
+
 #Get version of GCC, according to the repo
-VERSION="$(< gcc/gcc/BASE-VER)"
+VERSION="$(< "${BASEDIR}/src/gcc/gcc/BASE-VER")"
 
 # Build binutils
 echo -e "\nBuilding binutils ..."
@@ -424,12 +427,21 @@ cd "${BASEDIR}/build/gcc"
 make -s all-gcc ${JOBS}
 make -s install-gcc
 
+# Write gcc and binutils version and git hash to file
+cat > "${BASEDIR}/version" << EOF
+GCC_VERSION=${VERSION}
+GCC_SHA1=${GCC_SHA1}
+BINUTILS_VERSION=${BINUTILS_VERSION}
+BINUTILS_SHA1=${BINUTILS_SHA1}
+EOF
+
 # Install if specified
 if [[ "${INSTALL}" != "false" ]]; then
 	DESTDIR="${INSTALL}/gcc-${VERSION}-nolibc/${NAME}/"
 	mkdir -p "${DESTDIR}" || ( echo "Error: can't write to install dir, ${DESTDIR}"; exit 1 )
 	echo "Installing to ${DESTDIR}..."
 	rsync -aH --delete "${BASEDIR}/install/${NAME}"/ "${DESTDIR}"
+	cp "${BASEDIR}/version" "${DESTDIR}/version"
 fi
 
 # Print summary
