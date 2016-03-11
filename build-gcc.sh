@@ -28,6 +28,7 @@ JOBS="${JOBS:--j$(($(nproc) / 4))}"
 LOCAL="${LOCAL:-}"
 GCC_REFERENCE="${REFERENCE:-}"
 BINUTILS_REFERENCE="${REFERENCE:-}"
+BINUTILS_VERSION="${REFERENCE:-2.25}"
 # No defaults for these two
 TARGET="${TARGET:-}"
 VERSION="${VERSION:-}"
@@ -51,11 +52,12 @@ Required args:
 
 Options:
 --basedir <dir>		directory to use for build
---binutils <url>	URL to binutils git repository, default git://gitlab/mirror/binutils-gdb
+--binutils <url>	URL to binutils git repo, default git://gitlab/mirror/binutils-gdb.git
 --binutils-ref <dir>	Directory to reference git repo for binutils
+--binutils-ver <branch>	Use this branch for building binutils, defaults to 2.25
 --clean			delete the build in basedir (consider using with --install)
 --debug			run with set -x
---gcc <url>		URL to gcc git repository, default git://gitlab/mirror/gcc
+--gcc <url>		URL to gcc git repository, default git://gitlab/mirror/gcc.git
 --gcc-ref <dir>		Directory to reference git repo for gcc
 --git <url>		URL of git mirror to use, default git://gitlab/mirror
 --install <dir>		install the build to specified dir (consider using with --clean)
@@ -105,6 +107,7 @@ countdown() {
 print_summary() {
 	echo " * GCC ${VERSION} for ${NAME}"
 	echo " * From ${branch} on ${GIT_URL_GCC}"
+	echo " * Using binutils ${BINUTILS_VERSION}"
 	if [[ "${INSTALL}" != "false" ]]; then
 		echo -e " * Install to:\n\t${INSTALL}/gcc-${VERSION}-nolibc/${NAME}/"
 	fi
@@ -128,7 +131,7 @@ check_reference() {
 # PARSE COMMAND LINE ARGS
 #------------------------
 
-CMD_LINE=$(getopt -o b:cdg:hi:j:lr:t:v: --longoptions basedir:,binutils:,binutils-ref:,clean,debug,gcc:,gcc-ref:,git:,help,install:,jobs:,local,reference:,target:,version: -n "$0" -- "$@")
+CMD_LINE=$(getopt -o b:cdg:hi:j:lr:t:v: --longoptions basedir:,binutils:,binutils-ref:,binutils-ver:,clean,debug,gcc:,gcc-ref:,git:,help,install:,jobs:,local,reference:,target:,version: -n "$0" -- "$@")
 eval set -- "${CMD_LINE}"
 
 while true ; do
@@ -148,6 +151,10 @@ while true ; do
 			fi
 			check_reference "${2}"
 			BINUTILS_REFERENCE="--reference ${2}"
+			shift 2
+			;;
+		--binutils-ver)
+			BINUTILS_VERSION="${2}"
 			shift 2
 			;;
 		-c|--clean)
@@ -323,6 +330,23 @@ if [[ -z "${branch}" ]]; then
 	exit 1
 fi
 
+# Get a list of all tags and branches from the specified git server
+gitlist=($(git ls-remote --heads "${GIT_URL_BINUTILS}" 2>/dev/null |awk -F "/" '{print $NF}' |sort |uniq))
+
+# Look for binutils branch
+branch_binutils=""
+if [[ "${BINUTILS_VERSION}" == "master" ]]; then
+	branch_binutils="master"
+else
+	for i in "${!gitlist[@]}"; do
+		if [[ "${gitlist[i]}" == "binutils-${BINUTILS_VERSION//\./_}-branch" ]]; then
+			branch_binutils="binutils-${BINUTILS_VERSION//\./_}-branch"
+			break
+		fi
+	done
+fi
+[[ ! "${branch_binutils}" ]] && { echo "Can't find a branch with binutils ${BINUTILS_VERSION}" ; exit 1 ; }
+
 # Warn if we will clean the build and not install it. Don't pause for answer, just let user cancel.
 if [[ "${CLEAN}" == "true" && "${INSTALL}" == "false" ]]; then
 	echo "WARNING: You want to clean the build and you're not installing it either."
@@ -369,9 +393,9 @@ if [[ -n "${LOCAL}" ]]; then
 else
 	echo "Cloning sources..."
 	# We have a branch, so let's continue
-	git clone ${GCC_REFERENCE} -b "${branch}" --depth=10 -q "${GIT_URL_GCC}" 2>/dev/null || { echo "Failed to clone gcc git repo, exiting." ; exit 1 ; } && ( cd gcc; echo -e "\nLatest GCC commit:\n" ; git --no-pager log -1 )
+	git clone ${GCC_REFERENCE} -b "${branch}" --depth=1 -q "${GIT_URL_GCC}" 2>/dev/null || { echo "Failed to clone gcc git repo, exiting." ; exit 1 ; } && ( cd gcc; echo -e "\nLatest GCC commit:\n" ; git --no-pager log -1 )
 	# Get binutils
-	git clone ${BINUTILS_REFERENCE} -b binutils-2_25-branch --depth=10 -q "${GIT_URL_BINUTILS}" || { echo "Failed to clone binutils git repo, exiting." ; exit 1 ; } && ( cd binutils-gdb; echo -e "\nLatest binutils commit:\n" ; git --no-pager log -1 )
+	git clone ${BINUTILS_REFERENCE} -b "${branch_binutils}" --depth=1 -q "${GIT_URL_BINUTILS}" || { echo "Failed to clone binutils git repo, exiting." ; exit 1 ; } && ( cd binutils-gdb; echo -e "\nLatest binutils commit:\n" ; git --no-pager log -1 )
 fi
 
 #Get version of GCC, according to the repo
