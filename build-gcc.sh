@@ -7,7 +7,7 @@
 #------
 
 if grep -q debug <<< $@; then
-  set -x
+	set -x
 fi
 set -o errexit
 set -o pipefail
@@ -40,88 +40,88 @@ BASE=""
 
 # Print usage and quit
 usage() {
-  cat << EOF
+	cat << EOF
 Usage: $0 --version <version> --target <target> [options]
 
 Required args:
-  --version <num>     version of GCC to build, e.g. 5.2.0
-                      Can also be git tag or branch, we look for tags first
-  --target <string>   gcc target to build, as supported by gcc
-                      E.g., arm|aarch64|ppc|ppc64|ppc64le|sparc64|x86|x86_64
+--version <num>		version of GCC to build, e.g. 5.2.0
+			- Can also be git tag or branch, we look for tags first
+--target <string>	gcc target to build, as supported by gcc
+			- E.g., arm|aarch64|ppc|ppc64|ppc64le|sparc64|x86|x86_64
 
 Options:
-  --basedir <dir>     directory to use for build
-  --binutils <url>    URL to binutils git repository, default git://gitlab/mirror/binutils-gdb
-  --binutils-ref <dir> Directory to reference git repo for binutils
-  --clean             delete the build in basedir (consider using with --install)
-  --debug             run with set -x
-  --gcc <url>         URL to gcc git repository, default git://gitlab/mirror/gcc
-  --gcc-ref <dir>     Directory to reference git repo for gcc
-  --git <url>         URL of git mirror to use, default git://gitlab/mirror
-  --install <dir>     install the build to specified dir (consider using with --clean)
-  --jobs <num>        number of jobs to pass to make -j, will default to $(($(nproc) / 4))
-  --local             skips clone and uses gcc repos specified with --gcc and --binutils
-  --reference <dir>   parent dir for existing repo for clones, e.g. /var/lib/jenkins/git
-  --help              show this help message
+--basedir <dir>		directory to use for build
+--binutils <url>	URL to binutils git repository, default git://gitlab/mirror/binutils-gdb
+--binutils-ref <dir>	Directory to reference git repo for binutils
+--clean			delete the build in basedir (consider using with --install)
+--debug			run with set -x
+--gcc <url>		URL to gcc git repository, default git://gitlab/mirror/gcc
+--gcc-ref <dir>		Directory to reference git repo for gcc
+--git <url>		URL of git mirror to use, default git://gitlab/mirror
+--install <dir>		install the build to specified dir (consider using with --clean)
+--jobs <num>		number of jobs to pass to make -j, will default to $(($(nproc) / 4))
+--local			skips clone and uses gcc repos specified with --gcc and --binutils
+--reference <dir>	parent dir for existing repo for clones, e.g. /var/lib/jenkins/git
+--help			show this help message
 
 Short Options:
-  -b <dir>            Same as --basedir <dir>
-  -c                  Same as --clean
-  -d                  Same as --debug
-  -g <url>            Same as --git <url>
-  -i <dir>            Same as --install <dir>
-  -j <num>            Same as --jobs <num>
-  -l                  Same as --local
-  -r <url>            Same as --reference <dir>
-  -h                  Same as --help
+-b <dir>		Same as --basedir <dir>
+-c			Same as --clean
+-d			Same as --debug
+-g <url>		Same as --git <url>
+-i <dir>		Same as --install <dir>
+-j <num>		Same as --jobs <num>
+-l			Same as --local
+-r <url>		Same as --reference <dir>
+-h			Same as --help
 
 EOF
-  exit 1
+	exit 1
 }
 
 # Trap the EXIT call, clean up if required
 finish() {
-  if [[ "${CLEAN}" == "true" && "${BASE}" ]]; then
-    echo "Cleaning up basedir in ${BASEDIR}"
-    rm -rf "${BASEDIR:?}"/{install,src,build}
-  elif [[ "${BASE}" ]]; then
-    echo "Build dir still available under ${BASEDIR}"
-  fi
+	if [[ "${CLEAN}" == "true" && "${BASE}" ]]; then
+		echo "Cleaning up basedir in ${BASEDIR}"
+		rm -rf "${BASEDIR:?}"/{install,src,build}
+	elif [[ "${BASE}" ]]; then
+		echo "Build dir still available under ${BASEDIR}"
+	fi
 }
 trap finish EXIT
 
 # Countdown to give user a chance to exit
 countdown() {
-  i=5
-  while [[ "${i}" -ne 0 ]]; do
-    sleep 1
-    echo -n "${i}.. "
-    i=$(( i - 1 ))
-  done
-  sleep 1
+	i=5
+	while [[ "${i}" -ne 0 ]]; do
+		sleep 1
+		echo -n "${i}.. "
+		i=$(( i - 1 ))
+	done
+	sleep 1
 }
 
 # Print summary of the build for the user
 print_summary() {
-  echo " * GCC ${VERSION} for ${NAME}"
-  echo " * From ${branch} on ${GIT_URL_GCC}"
-  if [[ "${INSTALL}" != "false" ]]; then
-    echo -e " * Install to:\n\t${INSTALL}/gcc-${VERSION}-nolibc/${NAME}/"
-  fi
-  echo -n " * Build dir "
-  if [[ "${CLEAN}" == "true" ]]; then
-    echo -n "(to be cleaned) "
-  fi
-  echo -e "at: \n\t${BASEDIR}\n"
+	echo " * GCC ${VERSION} for ${NAME}"
+	echo " * From ${branch} on ${GIT_URL_GCC}"
+	if [[ "${INSTALL}" != "false" ]]; then
+		echo -e " * Install to:\n\t${INSTALL}/gcc-${VERSION}-nolibc/${NAME}/"
+	fi
+	echo -n " * Build dir "
+	if [[ "${CLEAN}" == "true" ]]; then
+		echo -n "(to be cleaned) "
+	fi
+	echo -e "at: \n\t${BASEDIR}\n"
 }
 
 # Check that reference repositories are legitimate, else exit
 check_reference() {
-      if [[ ! -d "${1}" ]]; then
-	      echo "Reference directories must be a local directory."
-	      echo "${1} is invalid."
-	      exit 1
-      fi
+	if [[ ! -d "${1}" ]]; then
+		echo "Reference directories must be a local directory."
+		echo "${1} is invalid."
+		exit 1
+	fi
 }
 
 #------------------------
@@ -132,90 +132,90 @@ CMD_LINE=$(getopt -o b:cdg:hi:j:lr:t:v: --longoptions basedir:,binutils:,binutil
 eval set -- "${CMD_LINE}"
 
 while true ; do
-  case "${1}" in
-    -b|--basedir)
-      BASEDIR="${2}"
-      shift 2
-      ;;
-    --binutils)
-      GIT_URL_BINUTILS="${2}"
-      shift 2
-      ;;
-    --binutils-ref)
-      if [[ -n "${BINUTILS_REFERENCE}" ]];then
-	  echo "--binutils-ref incompatible with --reference"
-	  exit 1
-      fi
-      check_reference "${2}"
-      BINUTILS_REFERENCE="--reference ${2}"
-      shift 2
-      ;;
-    -c|--clean)
-      CLEAN=true
-      shift
-      ;;
-    -d|--debug)
-      set -x
-      shift
-      ;;
-    --gcc)
-      GIT_URL_GCC="${2}"
-      shift 2
-      ;;
-    --gcc-ref)
-      if [[ -n "${GCC_REFERENCE}" ]];then
-	  echo "--gcc-ref incompatible with --reference"
-	  exit 1
-      fi
-      check_reference "${2}"
-      GCC_REFERENCE="--reference ${2}"
-      shift 2
-      ;;
-    -g|--git)
-      GIT_URL="${2}"
-      shift 2
-      ;;
-    -i|--install)
-      INSTALL="${2}"
-      shift 2
-      ;;
-    -j|--jobs)
-      JOBS="-j ${2}"
-      shift 2
-      ;;
-    -l|--local)
-      LOCAL="true"
-      shift
-      ;;
-    -r|--reference)
-      if [[ -n "${GCC_REFERENCE}" || -n "${BINUTILS_REFERENCE}" ]];then
-	  echo "--reference incompatible with --gcc-ref and --binutils-ref"
-	  exit 1
-      fi
-      check_reference "${2}"
-      GCC_REFERENCE="--reference ${2}/gcc.git"
-      BINUTILS_REFERENCE="--reference ${2}/binutils-gdb.git"
-      shift 2
-      ;;
-    -t|--target)
-      TARGET="${2}"
-      shift 2
-      ;;
-    -v|--version)
-      VERSION="${2}"
-      shift 2
-      ;;
-    -h|--help)
-      usage
-      ;;
-    --)
-      shift
-      break
-      ;;
-    *)
-      usage
-      ;;
-  esac
+	case "${1}" in
+		-b|--basedir)
+			BASEDIR="${2}"
+			shift 2
+			;;
+		--binutils)
+			GIT_URL_BINUTILS="${2}"
+			shift 2
+			;;
+		--binutils-ref)
+			if [[ -n "${BINUTILS_REFERENCE}" ]];then
+				echo "--binutils-ref incompatible with --reference"
+				exit 1
+			fi
+			check_reference "${2}"
+			BINUTILS_REFERENCE="--reference ${2}"
+			shift 2
+			;;
+		-c|--clean)
+			CLEAN=true
+			shift
+			;;
+		-d|--debug)
+			set -x
+			shift
+			;;
+		--gcc)
+			GIT_URL_GCC="${2}"
+			shift 2
+			;;
+		--gcc-ref)
+			if [[ -n "${GCC_REFERENCE}" ]];then
+				echo "--gcc-ref incompatible with --reference"
+				exit 1
+			fi
+			check_reference "${2}"
+			GCC_REFERENCE="--reference ${2}"
+			shift 2
+			;;
+		-g|--git)
+			GIT_URL="${2}"
+			shift 2
+			;;
+		-i|--install)
+			INSTALL="${2}"
+			shift 2
+			;;
+		-j|--jobs)
+			JOBS="-j ${2}"
+			shift 2
+			;;
+		-l|--local)
+			LOCAL="true"
+			shift
+			;;
+		-r|--reference)
+			if [[ -n "${GCC_REFERENCE}" || -n "${BINUTILS_REFERENCE}" ]];then
+				echo "--reference incompatible with --gcc-ref and --binutils-ref"
+				exit 1
+			fi
+			check_reference "${2}"
+			GCC_REFERENCE="--reference ${2}/gcc.git"
+			BINUTILS_REFERENCE="--reference ${2}/binutils-gdb.git"
+			shift 2
+			;;
+		-t|--target)
+			TARGET="${2}"
+			shift 2
+			;;
+		-v|--version)
+			VERSION="${2}"
+			shift 2
+			;;
+		-h|--help)
+			usage
+			;;
+		--)
+			shift
+			break
+			;;
+		*)
+			usage
+			;;
+	esac
 done
 
 #---------------
@@ -224,14 +224,14 @@ done
 
 # Make sure we have required args
 if [[ -z "${VERSION}" || -z "${TARGET}" ]]; then
-  usage
+	usage
 fi
 
 # If builddir isn't a full-path, exit
 if [[ "${BASEDIR:0:1}" != "/" ]]; then
-  echo "Basedir is not a full path, using this instead:"
-  echo -e "$(pwd)/${BASEDIR}\n"
-  BASEDIR="$(pwd)/${BASEDIR}"
+	echo "Basedir is not a full path, using this instead:"
+	echo -e "$(pwd)/${BASEDIR}\n"
+	BASEDIR="$(pwd)/${BASEDIR}"
 fi
 
 # Set the default git urls if they weren't specified
@@ -252,26 +252,26 @@ fi
 
 # Work out the targets for GCC, if it's ppc or arm then we need to set the targets appropriately
 case "${TARGET}" in
-  "arm")
-    TARGETS="--target=arm-linux-gnueabi --enable-targets=all"
-    NAME="arm-linux"
-    ;;
-  "ppc")
-    TARGETS="--target=powerpc-linux --enable-targets=all"
-    NAME="powerpc-linux"
-    ;;
-  "ppc64")
-    TARGETS="--target=powerpc64-linux --enable-targets=powerpc-linux,powerpc64-linux"
-    NAME="powerpc64-linux"
-    ;;
-  "ppc64le")
-    TARGETS="--target=powerpc64le-linux --enable-targets=powerpcle-linux,powerpc64le-linux"
-    NAME="powerpc64le-linux"
-    ;;
-  *)
-    TARGETS="--target=${TARGET}-linux --enable-targets=all"
-    NAME="${TARGET}-linux"
-    ;;
+	"arm")
+		TARGETS="--target=arm-linux-gnueabi --enable-targets=all"
+		NAME="arm-linux"
+		;;
+	"ppc")
+		TARGETS="--target=powerpc-linux --enable-targets=all"
+		NAME="powerpc-linux"
+		;;
+	"ppc64")
+		TARGETS="--target=powerpc64-linux --enable-targets=powerpc-linux,powerpc64-linux"
+		NAME="powerpc64-linux"
+		;;
+	"ppc64le")
+		TARGETS="--target=powerpc64le-linux --enable-targets=powerpcle-linux,powerpc64le-linux"
+		NAME="powerpc64le-linux"
+		;;
+	*)
+		TARGETS="--target=${TARGET}-linux --enable-targets=all"
+		NAME="${TARGET}-linux"
+		;;
 esac
 
 # Test that we can talk to both git servers before continuing
@@ -283,9 +283,9 @@ gitlist=($(git ls-remote --tags --heads "${GIT_URL_GCC}" 2>/dev/null |awk -F "/"
 
 # Error if we couldn't get tags or branches from git server
 if [[ "${#gitlist[*]}" -eq 0 ]]; then
-  # We didn't find anything
-  echo "ERROR: Couldn't get anything from the git server at ${GIT_URL_GCC}"
-  exit 1
+	# We didn't find anything
+	echo "ERROR: Couldn't get anything from the git server at ${GIT_URL_GCC}"
+	exit 1
 fi
 
 # Check if we have the version specified in either a tag or branch
@@ -293,52 +293,52 @@ fi
 
 branch=""
 for i in "${!gitlist[@]}"; do
-  # check for tags first
-  if [[ "${gitlist[i]}" == "gcc-${VERSION//\./_}-release" ]]; then
-    branch="gcc-${VERSION//\./_}-release"
-    break
-  # check for branches next
-  elif [[ "${gitlist[i]}" == "${VERSION}" ]]; then
-    branch="${VERSION}"
-    break
-  # if local then HEAD, else master
-  elif [[ "${VERSION}" == "HEAD" ]]; then
-    if [[ -n "${LOCAL}" ]]; then
-      branch="${VERSION}"
-      break
-    else
-      branch="master"
-      break
-    fi
-  fi
+	# check for tags first
+	if [[ "${gitlist[i]}" == "gcc-${VERSION//\./_}-release" ]]; then
+		branch="gcc-${VERSION//\./_}-release"
+		break
+		# check for branches next
+	elif [[ "${gitlist[i]}" == "${VERSION}" ]]; then
+		branch="${VERSION}"
+		break
+		# if local then HEAD, else master
+	elif [[ "${VERSION}" == "HEAD" ]]; then
+		if [[ -n "${LOCAL}" ]]; then
+			branch="${VERSION}"
+			break
+		else
+			branch="master"
+			break
+		fi
+	fi
 done
 
 # Else we can't find what we're looking for
 if [[ -z "${branch}" ]]; then
-  echo "Could not find the version, ${VERSION}"
-  if [[ "${GIT_URL_GCC:0:1}" == "/" || "${GIT_URL_GCC:0:1}" == "~" ]]; then
-    echo "If this is a local repo, you might not have that branch."
-    echo "Try checking out the branch or use a tag."
-  fi
-  exit 1
+	echo "Could not find the version, ${VERSION}"
+	if [[ "${GIT_URL_GCC:0:1}" == "/" || "${GIT_URL_GCC:0:1}" == "~" ]]; then
+		echo "If this is a local repo, you might not have that branch."
+		echo "Try checking out the branch or use a tag."
+	fi
+	exit 1
 fi
 
 # Warn if we will clean the build and not install it. Don't pause for answer, just let user cancel.
 if [[ "${CLEAN}" == "true" && "${INSTALL}" == "false" ]]; then
-  echo "WARNING: You want to clean the build and you're not installing it either."
-  echo "Are you sure?"
-  echo -e "\nContinuing in.."
-  countdown
-  echo -e "OK, continuing..\n"
+	echo "WARNING: You want to clean the build and you're not installing it either."
+	echo "Are you sure?"
+	echo -e "\nContinuing in.."
+	countdown
+	echo -e "OK, continuing..\n"
 fi
 
 # Test if we can write to the install directory before we go to the trouble of building everything
 if [[ "${INSTALL}" != "false" &&  ! -d "${INSTALL}" ]]; then
-  echo "ERROR: Install dir doesn't seem to exist at ${INSTALL}"
-  exit 1
+	echo "ERROR: Install dir doesn't seem to exist at ${INSTALL}"
+	exit 1
 elif [[ "${INSTALL}" != "false" &&  ! -w "${INSTALL}" ]]; then
-  echo "ERROR: Can't write to install dir at ${INSTALL}"
-  exit 1
+	echo "ERROR: Can't write to install dir at ${INSTALL}"
+	exit 1
 fi
 
 # Test and make our build directory
@@ -396,10 +396,10 @@ make -s install-gcc
 
 # Install if specified
 if [[ "${INSTALL}" != "false" ]]; then
-  DESTDIR="${INSTALL}/gcc-${VERSION}-nolibc/${NAME}/"
-  mkdir -p "${DESTDIR}" || ( echo "Error: can't write to install dir, ${DESTDIR}"; exit 1 )
-  echo "Installing to ${DESTDIR}..."
-  rsync -aH --delete "${BASEDIR}/install/${NAME}"/ "${DESTDIR}"
+	DESTDIR="${INSTALL}/gcc-${VERSION}-nolibc/${NAME}/"
+	mkdir -p "${DESTDIR}" || ( echo "Error: can't write to install dir, ${DESTDIR}"; exit 1 )
+	echo "Installing to ${DESTDIR}..."
+	rsync -aH --delete "${BASEDIR}/install/${NAME}"/ "${DESTDIR}"
 fi
 
 # Print summary
