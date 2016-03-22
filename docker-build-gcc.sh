@@ -5,6 +5,7 @@
 # It expects a few variables which are part of Jenkins build job matrix:
 #   WORKSPACE =
 
+
 # Trace bash processing
 set -x
 
@@ -14,6 +15,12 @@ http_proxy=${http_proxy:-}
 
 # Timestamp for job
 echo "Build started, $(date)"
+
+# Make sure we have a build.sh file
+if [[ ! -f "${WORKSPACE}/build.sh" ]]; then
+	echo "No build.sh file in ${WORKSPACE}"
+	exit 1
+fi
 
 # Configure docker build
 
@@ -48,38 +55,20 @@ EOF
 # Build the docker container
 docker build -t gcc-build/fedora - <<< "${Dockerfile}"
 if [[ "$?" -ne 0 ]]; then
-  echo "Failed to build docker container."
-  exit 1
+	echo "Failed to build docker container."
+	exit 1
 fi
 
-mkdir -p ${WORKSPACE}
-
-cat > "${WORKSPACE}"/build.sh << EOF_SCRIPT
-#!/bin/bash
-
-set -x
-
-export CC="ccache gcc"
-mkdir -p "${WORKSPACE}/gcc-build"
-mkdir -p "${WORKSPACE}/cross"
-
-cd "${WORKSPACE}/toolchain-build-script"
-./build-gcc.sh \
-	-v HEAD \
-	-t ppc \
-	-b ${WORKSPACE}/gcc-build \
-	-i ${WORKSPACE}/cross --gcc ${WORKSPACE}/gcc \
-	--binutils ${WORKSPACE}/binutils-gdb \
-	--local \
-	--clean
-
-EOF_SCRIPT
-
-chmod a+x ${WORKSPACE}/build.sh
-
 # Run the docker container, execute the build script we just built
-docker run --net=host --rm=true -e WORKSPACE=${WORKSPACE} --user="${USER}" \
-  -w "${HOME}" -v "${HOME}":"${HOME}":Z -t gcc-build/fedora ${WORKSPACE}/build.sh
+docker run \
+	--net=host \
+	--rm=true \
+	-e WORKSPACE=${WORKSPACE} \
+	--user="${USER}" \
+	-w "${HOME}" \
+	-v "${HOME}":"${HOME}":Z \
+	-t gcc-build/fedora \
+	${WORKSPACE}/build.sh
 
 # Timestamp for build
 echo "Build completed, $(date)"
