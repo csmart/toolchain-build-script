@@ -12,6 +12,7 @@ set -x
 # Default variables
 WORKSPACE=${WORKSPACE:-${HOME}/${RANDOM}${RANDOM}}
 http_proxy=${http_proxy:-}
+PROXY=""
 
 # Timestamp for job
 echo "Build started, $(date)"
@@ -24,8 +25,14 @@ fi
 
 # Configure docker build
 
+if [[ -n "${http_proxy}" ]]; then
+	PROXY="RUN echo "proxy=${http_proxy}" >> /etc/dnf/dnf.conf"
+fi
+
 Dockerfile=$(cat << EOF
 FROM fedora:23
+
+${PROXY}
 
 RUN dnf --refresh repolist && dnf install -y \
 	bison \
