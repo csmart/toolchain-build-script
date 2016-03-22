@@ -46,6 +46,7 @@ RUN dnf --refresh repolist && dnf install -y \
 	libmpc-devel \
 	make \
 	mpfr-devel \
+	socat \
 	tar \
 	texinfo \
 	xz
