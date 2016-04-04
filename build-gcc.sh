@@ -414,10 +414,16 @@ VERSION="$(< "${BASEDIR}/src/gcc/gcc/BASE-VER")"
 cd "${BASEDIR}/src/"
 
 # Linux
-git clone --depth=1 git://gitlab.ozlabs.ibm.com/mirror/linux.git
+git clone -b v4.5 --depth=1 git://gitlab.ozlabs.ibm.com/mirror/linux.git
+
+# binutils
+git clone -b binutils-2_26 --depth=1 git://gitlab.ozlabs.ibm.com/mirror/binutils-gdb.git
 
 # GCC
-git clone --depth=1 git://gitlab.ozlabs.ibm.com/mirror/gcc.git
+git clone -b gcc_5_3_0_release --depth=1 git://gitlab.ozlabs.ibm.com/mirror/gcc.git
+
+#glibc
+git clone -b glibc-2.23 --depth=1 git://gitlab.ozlabs.ibm.com/mirror/glibc.git
 
 # mpfr
 mkdir mpfr
@@ -431,7 +437,7 @@ wget http://ftpmirror.gnu.org/mpc/mpc-1.0.3.tar.gz && \
 
 # gmp
 mkdir gmp
-wget http://ftpmirror.gnu.org/gmp/gmp-6.1.0.tar.ba2 && \
+wget http://ftpmirror.gnu.org/gmp/gmp-6.1.0.tar.bz2 && \
 	tar -xf gmp-6.1.0.tar.bz2 -C gmp --strip-components 1
 
 # isl
