@@ -410,6 +410,50 @@ cd "${BASEDIR}/src/binutils-gdb" && BINUTILS_SHA1="$(git rev-parse HEAD)"
 #Get version of GCC, according to the repo
 VERSION="$(< "${BASEDIR}/src/gcc/gcc/BASE-VER")"
 
+# Get deps for libc
+cd "${BASEDIR}/src/"
+
+# Linux
+git clone --depth=1 git://gitlab.ozlabs.ibm.com/mirror/linux.git
+
+# GCC
+git clone --depth=1 git://gitlab.ozlabs.ibm.com/mirror/gcc.git
+
+# mpfr
+mkdir mpfr
+wget http://ftpmirror.gnu.org/mpfr/mpfr-3.1.4.tar.bz2 && \
+	tar -xf mpfr-3.1.4.tar.bz2 -C mpfr --strip-components 1
+
+# mpc
+mkdir mpc
+wget http://ftpmirror.gnu.org/mpc/mpc-1.0.3.tar.gz && \
+	tar -xf mpc-1.0.3.tar.gz -C mpc --strip-components 1
+
+# gmp
+mkdir gmp
+wget http://ftpmirror.gnu.org/gmp/gmp-6.1.0.tar.ba2 && \
+	tar -xf gmp-6.1.0.tar.bz2 -C gmp --strip-components 1
+
+# isl
+mkdir isl
+wget ftp://gcc.gnu.org/pub/gcc/infrastructure/isl-0.16.1.tar.bz2 && \
+	tar -xf isl-0.16.1.tar.bz2  -C isl --strip-components 1
+
+#cloog
+mkdir cloog
+wget ftp://gcc.gnu.org/pub/gcc/infrastructure/cloog-0.18.1.tar.gz && \
+	tar -xf cloog-0.18.1.tar.gz -C cloog --strip-components 1
+
+# Link gcc to deps
+cd "${BASEDIR}/src/gcc"
+for x in cloog gmp isl mpc mpfr; do
+	ln -s ../${x}
+done
+
+# Install Linux headers
+cd "${BASEDIR}/src/linux"
+make ARCH=powerpc INSTALL_HDR_PATH="${BASEDIR}/install/${NAME}/powerpc64-linux" headers_install
+
 # Build binutils
 echo -e "\nBuilding binutils ..."
 cd "${BASEDIR}/build/binutils"
@@ -418,14 +462,37 @@ cd "${BASEDIR}/build/binutils"
 make -s ${JOBS}
 make -s install
 
-# Build gcc
 echo -e "\nBuilding gcc ..."
 cd "${BASEDIR}/build/gcc"
-../../src/gcc/configure --prefix="${BASEDIR}/install/${NAME}" --disable-multilib --disable-bootstrap --enable-languages=c ${TARGETS}
+#../../src/gcc/configure --prefix="${BASEDIR}/install/${NAME}" --disable-multilib --disable-bootstrap --enable-languages=c ${TARGETS}
+../../gcc/configure --prefix=/tmp/cross --target=powerpc64-linux --enable-targets=powerpc-linux,powerpc64-linux --enable-languages=c,c++ --disable-multilib --with-long-double-128
 
 # We don't need libgcc for building the kernel, so keep it simple
-make -s all-gcc ${JOBS}
+make -s gcc_cv_libc_provides_ssp=yes all-gcc ${JOBS}
 make -s install-gcc
+
+# glibc
+mkdir "${BASEDIR}/build/glibc" && cd "${BASEDIR}/build/glibc"
+CROSS_COMPILE=powerpc64-linux- PATH="/tmp/cross/bin/:${PATH}" ../../src/glibc/configure --prefix=/tmp/cross/powerpc64-linux --build=${MACHTYPE} --host=powerpc64-linux --target=powerpc64-linux --with-headers=/tmp/cross/powerpc64-linux/include --disable-multilib libc_cv_forced_unwind=yes
+CROSS_COMPILE=powerpc64-linux- PATH="/tmp/cross/bin/:${PATH}" make install-bootstrap-headers=yes install-headers
+CROSS_COMPILE=powerpc64-linux- PATH="/tmp/cross/bin/:${PATH}" make -j4 csu/subdir_lib
+install csu/crt1.o csu/crti.o csu/crtn.o /tmp/cross/powerpc64-linux/lib
+/tmp/cross/bin/powerpc64-linux-gcc -nostdlib -nostartfiles -shared -x c /dev/null -o /tmp/cross/powerpc64-linux/lib/libc.so
+
+touch /tmp/cross/powerpc64-linux/include/gnu/stubs.h
+
+# back to gcc
+make -j4 all-target-libgcc
+make install-target-libgcc
+
+# back to glibc to build libc
+CROSS_COMPILE=powerpc64-linux- PATH="/tmp/cross/bin/:${PATH}" make -j4
+CROSS_COMPILE=powerpc64-linux- PATH="/tmp/cross/bin/:${PATH}" make install
+
+# back to gcc to build c++ support
+make -j4 gcc_cv_libc_provides_ssp=yes
+make install
+
 
 # Write gcc and binutils version and git hash to file
 cat > "${BASEDIR}/version" << EOF
