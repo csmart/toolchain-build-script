@@ -490,7 +490,7 @@ CROSS_COMPILE=powerpc64-linux- PATH="/tmp/cross/bin/:${PATH}" make -j4
 CROSS_COMPILE=powerpc64-linux- PATH="/tmp/cross/bin/:${PATH}" make install
 
 # back to gcc to build c++ support
-make -j4 gcc_cv_libc_provides_ssp=yes
+make -j4 #gcc_cv_libc_provides_ssp=yes
 make install
 
 
