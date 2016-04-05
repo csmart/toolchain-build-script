@@ -456,32 +456,32 @@ for x in cloog gmp isl mpc mpfr; do
 	ln -s ../${x}
 done
 
+TARGET="powerpc64-linux-gnu"
 PREFIX="${BASEDIR}/install/${NAME}"
+SYSROOT="${PREFIX)/sysroot"
+CROSS_COMPILE=${TARGET}-
 
 # Install Linux headers
 cd "${BASEDIR}/src/linux"
 #make ARCH=powerpc INSTALL_HDR_PATH="${BASEDIR}/install/${NAME}/" headers_install
-make ARCH=powerpc INSTALL_HDR_PATH="${PREFIX}/${NAME}" headers_install
+make ARCH=powerpc INSTALL_HDR_PATH="${SYSROOT}/usr" headers_install
 
 # Build binutils
 echo -e "\nBuilding binutils ..."
 mkdir -p "${BASEDIR}/build/binutils" && cd "${BASEDIR}/build/binutils"
 #../../src/binutils-gdb/configure --disable-gdb --disable-libdecnumber --disable-readline --disable-sim --prefix="${BASEDIR}/install/${NAME}" ${TARGETS}
 #../../src/binutils-gdb/configure --prefix="${BASEDIR}/install/${NAME}" ${TARGETS}
-../../src/binutils-gdb/configure --disable-gdb --disable-libdecnumber --disable-readline --disable-sim --prefix="${PREFIX}" ${TARGETS}
+#../../src/binutils-gdb/configure --disable-gdb --disable-libdecnumber --disable-readline --disable-sim --prefix="${PREFIX}" ${TARGETS} --with-sysroot=${SYSROOT}
 
+../../src/binutils-gdb/configure --prefix="${PREFIX}" ${TARGETS} --with-sysroot=${SYSROOT}
 
 make -s ${JOBS}
 make -s install
 
+# Build GCC
 echo -e "\nBuilding gcc ..."
 mkdir -p "${BASEDIR}/build/gcc" && cd "${BASEDIR}/build/gcc"
-#../../src/gcc/configure --prefix="${BASEDIR}/install/${NAME}" --disable-multilib --with-long-double-128 --enable-languages=c,c++ ${TARGETS}
-#../../gcc/configure --prefix=/tmp/cross --target=powerpc64-linux --enable-targets=powerpc-linux,powerpc64-linux --enable-languages=c,c++ --disable-multilib --with-long-double-128
-
-../../src/gcc/configure --prefix=${PREFIX} --target=powerpc64-linux --enable-targets=powerpc-linux,powerpc64-linux --enable-languages=c,c++ --disable-multilib --with-long-double-128
-
-# Build core gcc components without libgcc first
+../../src/gcc/configure --prefix=${PREFIX} --target=powerpc64-linux --enable-targets=powerpc-linux,powerpc64-linux --enable-languages=c,c++ --disable-multilib --with-long-double-128 --with-sysroot=${SYSROOT}
 make -s gcc_cv_libc_provides_ssp=yes all-gcc ${JOBS}
 make -s install-gcc
 
@@ -489,17 +489,21 @@ make -s install-gcc
 
 # glibc
 mkdir -p "${BASEDIR}/build/glibc" && cd "${BASEDIR}/build/glibc"
-CROSS_COMPILE=powerpc64-linux- PATH="${PREFIX}/bin/:${PATH}" ../../src/glibc/configure --prefix=${PREFIX}/powerpc64-linux --build=${MACHTYPE} --host=powerpc64-linux --target=powerpc64-linux --with-headers=${PREFIX}/powerpc64-linux/include --disable-multilib libc_cv_forced_unwind=yes
+CROSS_COMPILE=powerpc64-linux- PATH="${PREFIX}/bin/:${PATH}" \
+	../../src/glibc/configure --prefix=${PREFIX}/${TARGET} --build=${MACHTYPE} --host=powerpc64-linux --target=powerpc64-linux --with-headers=${SYSROOT}/usr/include --disable-multilib libc_cv_forced_unwind=yes
 
-CROSS_COMPILE=powerpc64-linux- PATH="${PREFIX}/bin/:${PATH}" make install-bootstrap-headers=yes install-headers
+CROSS_COMPILE=powerpc64-linux- PATH="${PREFIX}/bin/:${PATH}" \
+	make cross-compiling=yes install_root=${SYSROOT} install-bootstrap-headers=yes install-headers
 
-CROSS_COMPILE=powerpc64-linux- PATH="${PREFIX}/bin/:${PATH}" make ${JOBS} csu/subdir_lib
-
-install csu/crt1.o csu/crti.o csu/crtn.o ${PREFIX}/powerpc64-linux/lib
+CROSS_COMPILE=powerpc64-linux- PATH="${PREFIX}/bin/:${PATH}" \
+	make ${JOBS} csu/subdir_lib
+mkdir ${SYSROOT}/lib
+install csu/crt1.o csu/crti.o csu/crtn.o ${SYSROOT}/lib
 
 ${PREFIX}/bin/powerpc64-linux-gcc -nostdlib -nostartfiles -shared -x c /dev/null -o ${PREFIX}/powerpc64-linux/lib/libc.so
 
-touch ${PREFIX}/powerpc64-linux/include/gnu/stubs.h
+touch ${SYSROOT}/usr/include/gnu/stubs.h
+touch ${SYSROOT}/usr/include/bits/stdio_lim.h
 
 # back to gcc
 cd "${BASEDIR}/build/gcc"
