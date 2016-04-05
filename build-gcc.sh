@@ -515,9 +515,12 @@ CROSS_COMPILE=powerpc64-linux- PATH="${PREFIX}/bin/:${PATH}" \
 	make install
 
 # back to gcc to build c++ support
-cd "${BASEDIR}/build/gcc"
-make ${JOBS} #gcc_cv_libc_provides_ssp=yes
-make install
+mkdir -p "${BASEDIR}/build/gcc-stage2" && cd "${BASEDIR}/build/gcc-stage2"
+../../src/gcc/configure --prefix=${PREFIX} ${TARGETS} --enable-languages=c,c++ --disable-multilib --with-long-double-128 --with-sysroot=${SYSROOT}
+CROSS_COMPILE=powerpc64-linux- PATH="${PREFIX}/bin/:${PATH}" \
+	make ${JOBS} #gcc_cv_libc_provides_ssp=yes
+CROSS_COMPILE=powerpc64-linux- PATH="${PREFIX}/bin/:${PATH}" \
+	make install
 
 
 # Write gcc and binutils version and git hash to file
