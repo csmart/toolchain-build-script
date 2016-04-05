@@ -456,25 +456,30 @@ for x in cloog gmp isl mpc mpfr; do
 	ln -s ../${x}
 done
 
+PREFIX="${BASEDIR}/install/${NAME}"
+
 # Install Linux headers
 cd "${BASEDIR}/src/linux"
 #make ARCH=powerpc INSTALL_HDR_PATH="${BASEDIR}/install/${NAME}/" headers_install
-make ARCH=powerpc INSTALL_HDR_PATH="${BASEDIR}/install/${NAME}/${NAME}/" headers_install
+make ARCH=powerpc INSTALL_HDR_PATH="${PREFIX}/${NAME}" headers_install
 
 # Build binutils
 echo -e "\nBuilding binutils ..."
-cd "${BASEDIR}/build/binutils"
+mkdir -p "${BASEDIR}/build/binutils" && cd "${BASEDIR}/build/binutils"
 #../../src/binutils-gdb/configure --disable-gdb --disable-libdecnumber --disable-readline --disable-sim --prefix="${BASEDIR}/install/${NAME}" ${TARGETS}
-../../src/binutils-gdb/configure --prefix="${BASEDIR}/install/${NAME}" ${TARGETS}
+#../../src/binutils-gdb/configure --prefix="${BASEDIR}/install/${NAME}" ${TARGETS}
+../../src/binutils-gdb/configure --disable-gdb --disable-libdecnumber --disable-readline --disable-sim --prefix="${PREFIX}" ${TARGETS}
 
 
 make -s ${JOBS}
 make -s install
 
 echo -e "\nBuilding gcc ..."
-cd "${BASEDIR}/build/gcc"
-../../src/gcc/configure --prefix="${BASEDIR}/install/${NAME}" --disable-multilib --with-long-double-128 --enable-languages=c,c++ ${TARGETS}
+mkdir -p "${BASEDIR}/build/gcc" && cd "${BASEDIR}/build/gcc"
+#../../src/gcc/configure --prefix="${BASEDIR}/install/${NAME}" --disable-multilib --with-long-double-128 --enable-languages=c,c++ ${TARGETS}
 #../../gcc/configure --prefix=/tmp/cross --target=powerpc64-linux --enable-targets=powerpc-linux,powerpc64-linux --enable-languages=c,c++ --disable-multilib --with-long-double-128
+
+../../src/gcc/configure --prefix=${PREFIX} --target=powerpc64-linux --enable-targets=powerpc-linux,powerpc64-linux --enable-languages=c,c++ --disable-multilib --with-long-double-128
 
 # Build core gcc components without libgcc first
 make -s gcc_cv_libc_provides_ssp=yes all-gcc ${JOBS}
@@ -483,25 +488,32 @@ make -s install-gcc
 #only if libc specified
 
 # glibc
-mkdir "${BASEDIR}/build/glibc" && cd "${BASEDIR}/build/glibc"
-CROSS_COMPILE=${NAME}- PATH="${BASEDIR}/install/${NAME}/bin/:${PATH}" ../../src/glibc/configure --prefix="${BASEDIR}/install/${NAME}/${NAME}/" --build="${MACHTYPE}" --host=${NAME} --target=${NAME} --with-headers="${BASEDIR}/install/${NAME}/${NAME}/include" --disable-multilib libc_cv_forced_unwind=yes
-CROSS_COMPILE=${NAME}- PATH="${BASEDIR}/install/${NAME}/bin/:${PATH}" make install-bootstrap-headers=yes install-headers ${JOBS}
-CROSS_COMPILE=${NAME}- PATH="${BASEDIR}/install/${NAME}/bin/:${PATH}" make csu/subdir_lib ${JOBS}
-install csu/crt1.o csu/crti.o csu/crtn.o "${BASEDIR}/install/${NAME}/lib/"
-${BASEDIR}/install/${NAME}/bin/${NAME}-gcc -nostdlib -nostartfiles -shared -x c /dev/null -o "${BASEDIR}/install/${NAME}/lib/libc.so"
+mkdir -p "${BASEDIR}/build/glibc" && cd "${BASEDIR}/build/glibc"
+CROSS_COMPILE=powerpc64-linux- PATH="${PREFIX}/bin/:${PATH}" ../../src/glibc/configure --prefix=${PREFIX}/powerpc64-linux --build=${MACHTYPE} --host=powerpc64-linux --target=powerpc64-linux --with-headers=${PREFIX}/powerpc64-linux/include --disable-multilib libc_cv_forced_unwind=yes
 
-touch "${BASEDIR}/install/${NAME}/${NAME}/include/gnu/stubs.h"
+CROSS_COMPILE=powerpc64-linux- PATH="${PREFIX}/bin/:${PATH}" make install-bootstrap-headers=yes install-headers
+
+CROSS_COMPILE=powerpc64-linux- PATH="${PREFIX}/bin/:${PATH}" make ${JOBS} csu/subdir_lib
+
+install csu/crt1.o csu/crti.o csu/crtn.o ${PREFIX}/powerpc64-linux/lib
+
+${PREFIX}/bin/powerpc64-linux-gcc -nostdlib -nostartfiles -shared -x c /dev/null -o ${PREFIX}/powerpc64-linux/lib/libc.so
+
+touch ${PREFIX}/powerpc64-linux/include/gnu/stubs.h
 
 # back to gcc
+cd "${BASEDIR}/build/gcc"
 make -j4 all-target-libgcc
 make install-target-libgcc
 
 # back to glibc to build libc
-CROSS_COMPILE=powerpc64-linux- PATH="/tmp/cross/bin/:${PATH}" make -j4
-CROSS_COMPILE=powerpc64-linux- PATH="/tmp/cross/bin/:${PATH}" make install
+cd "${BASEDIR}/build/glibc"
+CROSS_COMPILE=powerpc64-linux- PATH="${PREFIX}/bin/:${PATH}" make ${JOBS}
+CROSS_COMPILE=powerpc64-linux- PATH="${PREFIX}/bin/:${PATH}" make install
 
 # back to gcc to build c++ support
-make -j4 #gcc_cv_libc_provides_ssp=yes
+cd "${BASEDIR}/build/gcc"
+make ${JOBS} #gcc_cv_libc_provides_ssp=yes
 make install
 
 
