@@ -456,9 +456,9 @@ for x in cloog gmp isl mpc mpfr; do
 	ln -s ../${x}
 done
 
-TARGET="powerpc64-linux-gnu"
+TARGET="powerpc64-linux"
 PREFIX="${BASEDIR}/install/${NAME}"
-SYSROOT="${PREFIX)/sysroot"
+SYSROOT="${PREFIX}/sysroot"
 CROSS_COMPILE=${TARGET}-
 
 # Install Linux headers
@@ -485,12 +485,10 @@ make -s install-gcc
 # glibc
 mkdir -p "${BASEDIR}/build/glibc" && cd "${BASEDIR}/build/glibc"
 CROSS_COMPILE=powerpc64-linux- PATH="${PREFIX}/bin/:${PATH}" \
-	../../src/glibc/configure --prefix=${SYSROOT} --build=${MACHTYPE} --host=powerpc64-linux --target=powerpc64-linux --with-headers=${SYSROOT}/usr/include --disable-multilib libc_cv_forced_unwind=yes
+	../../src/glibc/configure --prefix=${SYSROOT}/usr --build=${MACHTYPE} --host=powerpc64-linux --target=powerpc64-linux --with-headers=${SYSROOT}/usr/include --disable-multilib libc_cv_forced_unwind=yes
 
 CROSS_COMPILE=powerpc64-linux- PATH="${PREFIX}/bin/:${PATH}" \
-	make cross-compiling=yes install-bootstrap-headers=yes install-headers
-# don't specify install_root if we used full prefix above
-	#make cross-compiling=yes install_root=${SYSROOT} install-bootstrap-headers=yes install-headers
+	make install-bootstrap-headers=yes install-headers
 
 CROSS_COMPILE=powerpc64-linux- PATH="${PREFIX}/bin/:${PATH}" \
 	make ${JOBS} csu/subdir_lib
@@ -504,7 +502,7 @@ touch ${SYSROOT}/usr/include/gnu/stubs.h
 
 # back to gcc
 cd "${BASEDIR}/build/gcc"
-make -j4 all-target-libgcc
+make ${JOBS} all-target-libgcc
 make install-target-libgcc
 
 # back to glibc to build libc
@@ -518,7 +516,7 @@ CROSS_COMPILE=powerpc64-linux- PATH="${PREFIX}/bin/:${PATH}" \
 mkdir -p "${BASEDIR}/build/gcc-stage2" && cd "${BASEDIR}/build/gcc-stage2"
 ../../src/gcc/configure --prefix=${PREFIX} ${TARGETS} --enable-languages=c,c++ --disable-multilib --with-long-double-128 --with-sysroot=${SYSROOT}
 CROSS_COMPILE=powerpc64-linux- PATH="${PREFIX}/bin/:${PATH}" \
-	make ${JOBS} #gcc_cv_libc_provides_ssp=yes
+	make gcc_cv_libc_provides_ssp=yes ${JOBS}
 CROSS_COMPILE=powerpc64-linux- PATH="${PREFIX}/bin/:${PATH}" \
 	make install
 
