@@ -469,8 +469,7 @@ make ARCH=powerpc INSTALL_HDR_PATH="${SYSROOT}/usr" headers_install
 # Build binutils
 echo -e "\nBuilding binutils ..."
 mkdir -p "${BASEDIR}/build/binutils" && cd "${BASEDIR}/build/binutils"
-../../src/binutils-gdb/configure --prefix="${PREFIX}" ${TARGETS} --with-sysroot=${SYSROOT} \
-	--with-lib-path=${SYSROOT}/usr/lib
+../../src/binutils-gdb/configure --prefix="${PREFIX}" ${TARGETS} --with-sysroot=${SYSROOT}
 
 make -s ${JOBS}
 make -s install
@@ -478,9 +477,7 @@ make -s install
 # Build GCC
 echo -e "\nBuilding gcc ..."
 mkdir -p "${BASEDIR}/build/gcc" && cd "${BASEDIR}/build/gcc"
-../../src/gcc/configure --prefix=${PREFIX} ${TARGETS} --enable-languages=c,c++ --disable-multilib --with-long-double-128 --with-sysroot=${SYSROOT} \
-	--without-headers \
-	--with-local-prefix=${PREFIX}
+../../src/gcc/configure --prefix=${PREFIX} ${TARGETS} --enable-languages=c,c++ --disable-multilib --with-long-double-128 --with-sysroot=${SYSROOT}
 make -s gcc_cv_libc_provides_ssp=yes all-gcc ${JOBS}
 make -s install-gcc
 
@@ -489,9 +486,7 @@ make -s install-gcc
 # glibc
 mkdir -p "${BASEDIR}/build/glibc" && cd "${BASEDIR}/build/glibc"
 CROSS_COMPILE=powerpc64-linux- PATH="${PREFIX}/bin/:${PATH}" \
-	../../src/glibc/configure --prefix=/usr --build=${MACHTYPE} --host=powerpc64-linux --target=powerpc64-linux --with-headers=${SYSROOT}/usr/include --disable-multilib libc_cv_forced_unwind=yes \
-	libc_cv_ctors_header=yes \
-	libc_cv_c_cleanup=yes
+	../../src/glibc/configure --prefix=/usr --build=${MACHTYPE} --host=powerpc64-linux --target=powerpc64-linux --with-headers=${SYSROOT}/usr/include --disable-multilib --enable-obsolete-rpc --enable-systemtap libc_cv_forced_unwind=yes  
 
 CROSS_COMPILE=powerpc64-linux- PATH="${PREFIX}/bin/:${PATH}" \
 	make install-bootstrap-headers=yes install_root=${SYSROOT} install-headers
@@ -519,13 +514,20 @@ CROSS_COMPILE=powerpc64-linux- PATH="${PREFIX}/bin/:${PATH}" \
 	make install_root=${SYSROOT} install
 
 #maybe rebuild binutils with cross compiler?
-# mkdir -p "${BASEDIR}/build/binutils" && cd "${BASEDIR}/build/binutils"
+mkdir -p "${BASEDIR}/build/binutils-stage2" && cd "${BASEDIR}/build/binutils-stage2"
+CROSS_COMPILE=powerpc64-linux- PATH="${PREFIX}/bin/:${PATH}" \
+	../../src/binutils-gdb/configure --prefix="${PREFIX}" ${TARGETS} --with-sysroot=${SYSROOT}
+CROSS_COMPILE=powerpc64-linux- PATH="${PREFIX}/bin/:${PATH}" \
+	make -s ${JOBS}
+CROSS_COMPILE=powerpc64-linux- PATH="${PREFIX}/bin/:${PATH}" \
+	make -s install
 
 # back to gcc to build c++ support
 # maybe with new compiler, like binutils?
-#mkdir -p "${BASEDIR}/build/gcc-stage2" && cd "${BASEDIR}/build/gcc-stage2"
-#../../src/gcc/configure --prefix=${PREFIX} ${TARGETS} --enable-languages=c,c++ --disable-multilib --disable-bootstrap --with-long-double-128 --with-sysroot=${SYSROOT} --with-local-prefix=${PREFIX} --with-native-system-header-dir=${SYSROOT}/usr/include 
-cd "${BASEDIR}/build/gcc"
+mkdir -p "${BASEDIR}/build/gcc-stage2" && cd "${BASEDIR}/build/gcc-stage2"
+CROSS_COMPILE=powerpc64-linux- PATH="${PREFIX}/bin/:${PATH}" \
+	../../src/gcc/configure --prefix=${PREFIX} ${TARGETS} --enable-languages=c,c++ --disable-multilib --disable-bootstrap --with-long-double-128 --with-sysroot=${SYSROOT}
+#cd "${BASEDIR}/build/gcc"
 CROSS_COMPILE=powerpc64-linux- PATH="${PREFIX}/bin/:${PATH}" \
 	make gcc_cv_libc_provides_ssp=yes ${JOBS}
 CROSS_COMPILE=powerpc64-linux- PATH="${PREFIX}/bin/:${PATH}" \
