@@ -486,7 +486,7 @@ make -s install-gcc
 # glibc
 mkdir -p "${BASEDIR}/build/glibc" && cd "${BASEDIR}/build/glibc"
 CROSS_COMPILE=powerpc64-linux- PATH="${PREFIX}/bin/:${PATH}" \
-	../../src/glibc/configure --prefix=/usr --build=${MACHTYPE} --host=powerpc64-linux --target=powerpc64-linux --with-headers=${SYSROOT}/usr/include --disable-multilib --enable-obsolete-rpc --enable-systemtap libc_cv_forced_unwind=yes  
+	../../src/glibc/configure --prefix=/usr --build=${MACHTYPE} --host=powerpc64-linux --target=powerpc64-linux --with-headers=${SYSROOT}/usr/include --disable-multilib --enable-obsolete-rpc libc_cv_forced_unwind=yes
 
 CROSS_COMPILE=powerpc64-linux- PATH="${PREFIX}/bin/:${PATH}" \
 	make install-bootstrap-headers=yes install_root=${SYSROOT} install-headers
