@@ -471,15 +471,13 @@ echo -e "\nBuilding binutils ..."
 mkdir -p "${BASEDIR}/build/binutils" && cd "${BASEDIR}/build/binutils"
 ../../src/binutils-gdb/configure --prefix="${PREFIX}" ${TARGETS} --with-sysroot=${SYSROOT}
 
-make -s ${JOBS}
-make -s install
+make -s ${JOBS} && make -s install
 
 # Build GCC
 echo -e "\nBuilding gcc ..."
 mkdir -p "${BASEDIR}/build/gcc" && cd "${BASEDIR}/build/gcc"
 ../../src/gcc/configure --prefix=${PREFIX} ${TARGETS} --enable-languages=c,c++ --disable-multilib --with-long-double-128 --with-sysroot=${SYSROOT}
-make -s gcc_cv_libc_provides_ssp=yes all-gcc ${JOBS}
-make -s install-gcc
+make -s gcc_cv_libc_provides_ssp=yes all-gcc ${JOBS} && make -s install-gcc
 
 #only if libc specified
 
