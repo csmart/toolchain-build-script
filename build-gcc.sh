@@ -29,8 +29,10 @@ LOCAL="${LOCAL:-}"
 GCC_REFERENCE="${REFERENCE:-}"
 BINUTILS_REFERENCE="${REFERENCE:-}"
 BINUTILS_VERSION="${REFERENCE:-2.25}"
-# No defaults for these two
+GLIBC="${GLIBC:-none}"
+# No defaults for these
 TARGET="${TARGET:-}"
+ARCH_LINUX="${ARCH_LINUX:-}"
 VERSION="${VERSION:-}"
 # Used internally to know that we've successfully created BASEDIR
 BASE=""
@@ -46,9 +48,9 @@ Usage: $0 --version <version> --target <target> [options]
 
 Required args:
 --version <num>		version of GCC to build, e.g. 5.2.0
-			- Can also be git tag or branch, we look for tags first
+- Can also be git tag or branch, we look for tags first
 --target <string>	gcc target to build, as supported by gcc
-			- E.g., arm|aarch64|ppc|ppc64|ppc64le|sparc64|x86|x86_64
+- E.g., arm|aarch64|ppc|ppc64|ppc64le|sparc64|x86|x86_64
 
 Options:
 --basedir <dir>		directory to use for build
@@ -257,29 +259,42 @@ if [[ -n "${LOCAL}" ]]; then
 	fi
 fi
 
-# Work out the targets for GCC, if it's ppc or arm then we need to set the targets appropriately
+# Work out the targets for GCC
+# ARM and PPC need to set the targets appropriately, else base on ${TARGET}
 case "${TARGET}" in
 	"arm")
 		TARGETS="--target=arm-linux-gnueabi --enable-targets=all"
 		NAME="arm-linux"
+		ARCH_LINUX="arm"
 		;;
-	"ppc")
+	"ppc"|"powerpc")
 		TARGETS="--target=powerpc-linux --enable-targets=all"
 		NAME="powerpc-linux"
+		ARCH_LINUX="powerpc"
 		;;
-	"ppc64")
+	"ppc64"|"powerpc64")
 		TARGETS="--target=powerpc64-linux --enable-targets=powerpc-linux,powerpc64-linux"
 		NAME="powerpc64-linux"
+		ARCH_LINUX="powerpc"
 		;;
-	"ppc64le")
+	"ppc64le"|"powerpc64le")
 		TARGETS="--target=powerpc64le-linux --enable-targets=powerpcle-linux,powerpc64le-linux"
 		NAME="powerpc64le-linux"
+		ARCH_LINUX="powerpc"
 		;;
 	*)
 		TARGETS="--target=${TARGET}-linux --enable-targets=all"
 		NAME="${TARGET}-linux"
+		ARCH_LINUX="${TARGET}"
 		;;
 esac
+
+# Now that we have ${NAME}, set other variables for building 
+SRC_DIR="${BASEDIR}/src"
+BUILD_DIR="${BASEDIR}/build"
+INSTALL_DIR="${BASEDIR}/install"
+PREFIX="${INSTALL_DIR}/${NAME}"
+SYSROOT="${PREFIX}/sysroot"
 
 # Test that we can talk to both git servers before continuing
 [[ "$(git ls-remote --tags --heads "${GIT_URL_GCC}" 2>/dev/null)" ]] || ( echo "ERROR: Couldn't contact gcc git server" ; exit 1 )
@@ -390,7 +405,7 @@ echo -e "\n\"Engage!\"\n"
 #-------------
 
 # Clone the sources
-cd "${BASEDIR}/src"
+cd "${SRC_DIR}"
 
 if [[ -n "${LOCAL}" ]]; then
 	echo "Linking existing sources..."
@@ -404,134 +419,67 @@ else
 	git clone ${BINUTILS_REFERENCE} -b "${branch_binutils}" --depth=1 -q "${GIT_URL_BINUTILS}" || { echo "Failed to clone binutils git repo, exiting." ; exit 1 ; } && ( cd binutils-gdb; echo -e "\nLatest binutils commit:\n" ; git --no-pager log -1 )
 fi
 
-cd "${BASEDIR}/src/gcc" && GCC_SHA1="$(git rev-parse HEAD)"
-cd "${BASEDIR}/src/binutils-gdb" && BINUTILS_SHA1="$(git rev-parse HEAD)"
+cd "${SRC_DIR}/gcc" && GCC_SHA1="$(git rev-parse HEAD)"
+cd "${SRC_DIR}/binutils-gdb" && BINUTILS_SHA1="$(git rev-parse HEAD)"
 
 #Get version of GCC, according to the repo
-VERSION="$(< "${BASEDIR}/src/gcc/gcc/BASE-VER")"
+VERSION="$(< "${SRC_DIR}/gcc/gcc/BASE-VER")"
 
-# Get deps for libc
-cd "${BASEDIR}/src/"
+if [[ "${GLIBC}" != "none" ]]; then
+	echo "Getting dependencies for glibc..."
+	# Get deps for libc
+	cd "${SRC_DIR}"
 
-# Linux
-git clone -b v4.5 --depth=1 git://gitlab.ozlabs.ibm.com/mirror/linux.git
+	# Linux
+	git clone -b v4.5 --depth=1 git://gitlab.ozlabs.ibm.com/mirror/linux.git
 
-# binutils
-git clone -b binutils-2_26 --depth=1 git://gitlab.ozlabs.ibm.com/mirror/binutils-gdb.git
+	#glibc
+	git clone -b glibc-2.23 --depth=1 git://gitlab.ozlabs.ibm.com/mirror/glibc.git
 
-# GCC
-git clone -b gcc_5_3_0_release --depth=1 git://gitlab.ozlabs.ibm.com/mirror/gcc.git
+	# mpfr
+	mkdir mpfr
+	wget http://ftpmirror.gnu.org/mpfr/mpfr-3.1.4.tar.bz2 && \
+		tar -xf mpfr-3.1.4.tar.bz2 -C mpfr --strip-components 1
 
-#glibc
-git clone -b glibc-2.23 --depth=1 git://gitlab.ozlabs.ibm.com/mirror/glibc.git
+	# mpc
+	mkdir mpc
+	wget http://ftpmirror.gnu.org/mpc/mpc-1.0.3.tar.gz && \
+		tar -xf mpc-1.0.3.tar.gz -C mpc --strip-components 1
 
-# mpfr
-mkdir mpfr
-wget http://ftpmirror.gnu.org/mpfr/mpfr-3.1.4.tar.bz2 && \
-	tar -xf mpfr-3.1.4.tar.bz2 -C mpfr --strip-components 1
+	# gmp
+	mkdir gmp
+	wget http://ftpmirror.gnu.org/gmp/gmp-6.1.0.tar.bz2 && \
+		tar -xf gmp-6.1.0.tar.bz2 -C gmp --strip-components 1
 
-# mpc
-mkdir mpc
-wget http://ftpmirror.gnu.org/mpc/mpc-1.0.3.tar.gz && \
-	tar -xf mpc-1.0.3.tar.gz -C mpc --strip-components 1
+	# isl
+	mkdir isl
+	wget ftp://gcc.gnu.org/pub/gcc/infrastructure/isl-0.16.1.tar.bz2 && \
+		tar -xf isl-0.16.1.tar.bz2  -C isl --strip-components 1
 
-# gmp
-mkdir gmp
-wget http://ftpmirror.gnu.org/gmp/gmp-6.1.0.tar.bz2 && \
-	tar -xf gmp-6.1.0.tar.bz2 -C gmp --strip-components 1
+	#cloog
+	mkdir cloog
+	wget ftp://gcc.gnu.org/pub/gcc/infrastructure/cloog-0.18.1.tar.gz && \
+		tar -xf cloog-0.18.1.tar.gz -C cloog --strip-components 1
 
-# isl
-mkdir isl
-wget ftp://gcc.gnu.org/pub/gcc/infrastructure/isl-0.16.1.tar.bz2 && \
-	tar -xf isl-0.16.1.tar.bz2  -C isl --strip-components 1
+	# Link gcc to deps
+	cd "${BASEDIR}/src/gcc"
+	for x in cloog gmp isl mpc mpfr; do
+		ln -s ../${x}
+	done
+fi
 
-#cloog
-mkdir cloog
-wget ftp://gcc.gnu.org/pub/gcc/infrastructure/cloog-0.18.1.tar.gz && \
-	tar -xf cloog-0.18.1.tar.gz -C cloog --strip-components 1
-
-# Link gcc to deps
-cd "${BASEDIR}/src/gcc"
-for x in cloog gmp isl mpc mpfr; do
-	ln -s ../${x}
-done
-
-#NAME="powerpc-linux"
-#TARGETS="--target=powerpc-linux --enable-targets=all"
-PREFIX="${BASEDIR}/install/${NAME}"
-SYSROOT="${PREFIX}/sysroot"
-
-# Install Linux headers
-cd "${BASEDIR}/src/linux"
-#make ARCH=powerpc INSTALL_HDR_PATH="${BASEDIR}/install/${NAME}/" headers_install
-make ARCH=powerpc INSTALL_HDR_PATH="${SYSROOT}/usr" headers_install
-
-# Build binutils
+# Build binutils, first pass (no --with-sysroot="${SYSROOT}")
 echo -e "\nBuilding binutils ..."
-mkdir -p "${BASEDIR}/build/binutils" && cd "${BASEDIR}/build/binutils"
-../../src/binutils-gdb/configure --prefix="${PREFIX}" ${TARGETS} --with-sysroot=${SYSROOT}
+mkdir -p "${BUILD_DIR}/binutils" && cd "${BUILD_DIR}/binutils"
+../../src/binutils-gdb/configure --prefix="${PREFIX}" ${TARGETS}
 
 make -s ${JOBS} && make -s install
 
-# Build GCC
+# Build GCC, first pass (no c++, no --with-sysroot="${SYSROOT}")
 echo -e "\nBuilding gcc ..."
-mkdir -p "${BASEDIR}/build/gcc" && cd "${BASEDIR}/build/gcc"
-../../src/gcc/configure --prefix=${PREFIX} ${TARGETS} --enable-languages=c,c++ --disable-multilib --with-long-double-128 --with-sysroot=${SYSROOT}
+mkdir -p "${BUILD_DIR}/gcc" && cd "${BUILD_DIR}/gcc"
+../../src/gcc/configure --prefix="${PREFIX}" ${TARGETS} --enable-languages=c --disable-bootstrap --disable-multilib --with-long-double-128
 make -s gcc_cv_libc_provides_ssp=yes all-gcc ${JOBS} && make -s install-gcc
-
-#only if libc specified
-
-# glibc
-mkdir -p "${BASEDIR}/build/glibc" && cd "${BASEDIR}/build/glibc"
-CROSS_COMPILE=${NAME}- PATH="${PREFIX}/bin/:${PATH}" \
-	../../src/glibc/configure --prefix=/usr --build=${MACHTYPE} --host=${NAME} --target=${NAME} --with-headers=${SYSROOT}/usr/include --disable-multilib --enable-obsolete-rpc libc_cv_forced_unwind=yes
-
-CROSS_COMPILE=${NAME}- PATH="${PREFIX}/bin/:${PATH}" \
-	make install-bootstrap-headers=yes install_root=${SYSROOT} install-headers
-
-CROSS_COMPILE=${NAME}- PATH="${PREFIX}/bin/:${PATH}" \
-	make ${JOBS} csu/subdir_lib
-mkdir -p ${SYSROOT}/usr/lib
-install csu/crt1.o csu/crti.o csu/crtn.o ${SYSROOT}/usr/lib
-
-${PREFIX}/bin/${NAME}-gcc -nostdlib -nostartfiles -shared -x c /dev/null -o ${SYSROOT}/usr/lib/libc.so
-
-mkdir -p ${SYSROOT}/usr/include/gnu
-touch ${SYSROOT}/usr/include/gnu/stubs.h
-
-# back to gcc
-cd "${BASEDIR}/build/gcc"
-CROSS_COMPILE=${NAME}- PATH="${PREFIX}/bin/:${PATH}" \
-	make ${JOBS} all-target-libgcc
-CROSS_COMPILE=${NAME}- PATH="${PREFIX}/bin/:${PATH}" \
-	make install-target-libgcc
-
-# back to glibc to build libc
-cd "${BASEDIR}/build/glibc"
-CROSS_COMPILE=${NAME}- PATH="${PREFIX}/bin/:${PATH}" \
-	make ${JOBS}
-CROSS_COMPILE=${NAME}- PATH="${PREFIX}/bin/:${PATH}" \
-	make install_root=${SYSROOT} install
-
-#maybe rebuild binutils with cross compiler?
-mkdir -p "${BASEDIR}/build/binutils-stage2" && cd "${BASEDIR}/build/binutils-stage2"
-CROSS_COMPILE=${NAME}- PATH="${PREFIX}/bin/:${PATH}" \
-	../../src/binutils-gdb/configure --prefix="${PREFIX}" ${TARGETS} --with-sysroot=${SYSROOT}
-CROSS_COMPILE=${NAME}- PATH="${PREFIX}/bin/:${PATH}" \
-	make -s ${JOBS}
-CROSS_COMPILE=${NAME}- PATH="${PREFIX}/bin/:${PATH}" \
-	make -s install
-
-# back to gcc to build c++ support
-# maybe with new compiler, like binutils?
-mkdir -p "${BASEDIR}/build/gcc-stage2" && cd "${BASEDIR}/build/gcc-stage2"
-CROSS_COMPILE=${NAME}- PATH="${PREFIX}/bin/:${PATH}" \
-	../../src/gcc/configure --prefix=${PREFIX} ${TARGETS} --enable-languages=c,c++ --disable-multilib --disable-bootstrap --with-long-double-128 --with-sysroot=${SYSROOT}
-CROSS_COMPILE=${NAME}- PATH="${PREFIX}/bin/:${PATH}" \
-	make gcc_cv_libc_provides_ssp=yes ${JOBS}
-CROSS_COMPILE=${NAME}- PATH="${PREFIX}/bin/:${PATH}" \
-	make install
-
 
 # Write gcc and binutils version and git hash to file
 cat > "${BASEDIR}/version" << EOF
@@ -541,9 +489,58 @@ BINUTILS_VERSION=${BINUTILS_VERSION}
 BINUTILS_SHA1=${BINUTILS_SHA1}
 EOF
 
+if [[ "${GLIBC}" != "none" ]];
+then
+	# Now that we have a basic GCC and binutils, we can cross compile the rest
+	export CROSS_COMPILE="${NAME}-"
+	export PATH="${PREFIX}/bin/:${PATH}"
+
+	# Install Linux headers
+	echo -e "\nInstalling Linux headers ..."
+	cd "${BASEDIR}/src/linux"
+	make ARCH="${ARCH_LINUX}" INSTALL_HDR_PATH="${SYSROOT}/usr" headers_install
+
+	# Install glibc headers
+	mkdir -p "${BUILD_DIR}/glibc" && cd "${BUILD_DIR}/glibc"
+	../../src/glibc/configure --prefix=/usr --build="${MACHTYPE}" --host="${NAME}" --target="${NAME}" --with-headers="${SYSROOT}/usr/include" --disable-multilib --enable-obsolete-rpc libc_cv_forced_unwind=yes
+	make install-bootstrap-headers=yes install_root="${SYSROOT}" install-headers
+
+	# Build crt, required for next stage GCC
+	make ${JOBS} csu/subdir_lib
+	mkdir -p "${SYSROOT}/usr/lib"
+	install csu/crt1.o csu/crti.o csu/crtn.o "${SYSROOT}/usr/lib"
+
+	# Next stage GCC requires libc.so and stubs.h to exist
+	"${PREFIX}/bin/${NAME}-gcc" -nostdlib -nostartfiles -shared -x c /dev/null -o "${SYSROOT}/usr/lib/libc.so"
+	mkdir -p "${SYSROOT}/usr/include/gnu"
+	touch "${SYSROOT}/usr/include/gnu/stubs.h"
+
+	# Build libgcc
+	cd "${BUILD_DIR}/gcc"
+	make ${JOBS} all-target-libgcc && make install-target-libgcc
+
+	# Build glibc
+	cd "${BUILD_DIR}/glibc"
+	make ${JOBS} && make install_root="${SYSROOT}" install
+
+	# Rebuild binutils with new native compiler
+	mkdir -p "${BUILD_DIR}/binutils-stage2" && cd "${BUILD_DIR}/binutils-stage2"
+	../../src/binutils-gdb/configure --prefix="${PREFIX}" ${TARGETS} --with-sysroot="${SYSROOT}"
+	make -s ${JOBS} && make -s install
+
+	# Rebuild GCC with new native compiler
+	mkdir -p "${BUILD_DIR}/gcc-stage2" && cd "${BUILD_DIR}/gcc-stage2"
+	../../src/gcc/configure --prefix="${PREFIX}" ${TARGETS} --enable-languages=c,c++ --disable-multilib --with-long-double-128 --with-sysroot="${SYSROOT}"
+	make gcc_cv_libc_provides_ssp=yes ${JOBS} && make install
+fi
+
 # Install if specified
 if [[ "${INSTALL}" != "false" ]]; then
-	DESTDIR="${INSTALL}/gcc-${VERSION}-nolibc/${NAME}/"
+	if [[ "${GLIBC}" == "none" ]]; then
+		DESTDIR="${INSTALL}/gcc-${VERSION}-nolibc/${NAME}/"
+	else
+		DESTDIR="${INSTALL}/gcc-${VERSION}-libc-${GLIBC}/${NAME}/"
+	fi
 	mkdir -p "${DESTDIR}" || ( echo "Error: can't write to install dir, ${DESTDIR}"; exit 1 )
 	echo "Installing to ${DESTDIR}..."
 	rsync -aH --delete "${BASEDIR}/install/${NAME}"/ "${DESTDIR}"
@@ -553,5 +550,3 @@ fi
 # Print summary
 echo "We built:"
 print_summary
-
-exit 0
