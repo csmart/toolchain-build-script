@@ -111,7 +111,7 @@ print_summary() {
 	echo " * From ${branch} on ${GIT_URL_GCC}"
 	echo " * Using binutils ${branch_binutils}"
 	if [[ "${INSTALL}" != "false" ]]; then
-		echo -e " * Install to:\n\t${INSTALL}/gcc-${VERSION}-nolibc/${NAME}/"
+		echo -e " * Install to:\n\t${DEST_DIR}"
 	fi
 	echo -n " * Build dir "
 	if [[ "${CLEAN}" == "true" ]]; then
@@ -295,6 +295,11 @@ BUILD_DIR="${BASEDIR}/build"
 INSTALL_DIR="${BASEDIR}/install"
 PREFIX="${INSTALL_DIR}/${NAME}"
 SYSROOT="${PREFIX}/sysroot"
+if [[ "${GLIBC}" == "none" ]]; then
+	DEST_DIR="${INSTALL}/gcc-${VERSION}-nolibc/${NAME}/"
+else
+	DEST_DIR="${INSTALL}/gcc-${VERSION}-libc-${GLIBC}/${NAME}/"
+fi
 
 # Test that we can talk to both git servers before continuing
 [[ "$(git ls-remote --tags --heads "${GIT_URL_GCC}" 2>/dev/null)" ]] || ( echo "ERROR: Couldn't contact gcc git server" ; exit 1 )
@@ -536,15 +541,10 @@ fi
 
 # Install if specified
 if [[ "${INSTALL}" != "false" ]]; then
-	if [[ "${GLIBC}" == "none" ]]; then
-		DESTDIR="${INSTALL}/gcc-${VERSION}-nolibc/${NAME}/"
-	else
-		DESTDIR="${INSTALL}/gcc-${VERSION}-libc-${GLIBC}/${NAME}/"
-	fi
-	mkdir -p "${DESTDIR}" || ( echo "Error: can't write to install dir, ${DESTDIR}"; exit 1 )
-	echo "Installing to ${DESTDIR}..."
-	rsync -aH --delete "${BASEDIR}/install/${NAME}"/ "${DESTDIR}"
-	cp "${BASEDIR}/version" "${DESTDIR}/version"
+	mkdir -p "${DEST_DIR}" || { echo "Error: can't write to install dir, ${DEST_DIR}" ; exit 1 ; }
+	echo "Installing to ${DEST_DIR}..."
+	rsync -aH --delete "${BASEDIR}/install/${NAME}"/ "${DEST_DIR}"
+	cp "${BASEDIR}/version" "${DEST_DIR}/version"
 fi
 
 # Print summary
