@@ -467,23 +467,34 @@ if [[ "${GLIBC}" != "none" ]]; then
 		tar -xf cloog-0.18.1.tar.gz -C cloog --strip-components 1
 
 	# Link gcc to deps
-	cd "${BASEDIR}/src/gcc"
+	cd "${SRC_DIR}/gcc"
 	for x in cloog gmp isl mpc mpfr; do
 		ln -s ../${x}
 	done
 fi
 
+# Linux headers
+if [[ "${GLIBC}" != "none" ]];
+then
+	# Install Linux headers
+	echo -e "\nInstalling Linux headers ..."
+	cd "${SRC_DIR}/linux"
+	make ARCH="${ARCH_LINUX}" INSTALL_HDR_PATH="${SYSROOT}/usr" headers_install
+else
+	mkdir -p ${SYSROOT}
+fi
+
 # Build binutils, first pass (no --with-sysroot="${SYSROOT}")
 echo -e "\nBuilding binutils ..."
 mkdir -p "${BUILD_DIR}/binutils" && cd "${BUILD_DIR}/binutils"
-../../src/binutils-gdb/configure --prefix="${PREFIX}" ${TARGETS}
+../../src/binutils-gdb/configure --prefix="${PREFIX}" ${TARGETS} --with-sysroot=${SYSROOT}
 
 make -s ${JOBS} && make -s install
 
 # Build GCC, first pass (no c++, no --with-sysroot="${SYSROOT}")
 echo -e "\nBuilding gcc ..."
 mkdir -p "${BUILD_DIR}/gcc" && cd "${BUILD_DIR}/gcc"
-../../src/gcc/configure --prefix="${PREFIX}" ${TARGETS} --enable-languages=c --disable-bootstrap --disable-multilib --with-long-double-128
+../../src/gcc/configure --prefix="${PREFIX}" ${TARGETS} --enable-languages=c,c++ --disable-bootstrap --disable-multilib --with-long-double-128 --with-sysroot="${SYSROOT}"
 make -s gcc_cv_libc_provides_ssp=yes all-gcc ${JOBS} && make -s install-gcc
 
 # Write gcc and binutils version and git hash to file
@@ -500,11 +511,6 @@ then
 	export CROSS_COMPILE="${NAME}-"
 	export PATH="${PREFIX}/bin/:${PATH}"
 
-	# Install Linux headers
-	echo -e "\nInstalling Linux headers ..."
-	cd "${BASEDIR}/src/linux"
-	make ARCH="${ARCH_LINUX}" INSTALL_HDR_PATH="${SYSROOT}/usr" headers_install
-
 	# Install glibc headers
 	mkdir -p "${BUILD_DIR}/glibc" && cd "${BUILD_DIR}/glibc"
 	../../src/glibc/configure --prefix=/usr --build="${MACHTYPE}" --host="${NAME}" --target="${NAME}" --with-headers="${SYSROOT}/usr/include" --disable-multilib --enable-obsolete-rpc libc_cv_forced_unwind=yes
@@ -516,7 +522,7 @@ then
 	install csu/crt1.o csu/crti.o csu/crtn.o "${SYSROOT}/usr/lib"
 
 	# Next stage GCC requires libc.so and stubs.h to exist
-	"${PREFIX}/bin/${NAME}-gcc" -nostdlib -nostartfiles -shared -x c /dev/null -o "${SYSROOT}/usr/lib/libc.so"
+	${NAME}-gcc -nostdlib -nostartfiles -shared -x c /dev/null -o "${SYSROOT}/usr/lib/libc.so"
 	mkdir -p "${SYSROOT}/usr/include/gnu"
 	touch "${SYSROOT}/usr/include/gnu/stubs.h"
 
@@ -543,7 +549,7 @@ fi
 if [[ "${INSTALL}" != "false" ]]; then
 	mkdir -p "${DEST_DIR}" || { echo "Error: can't write to install dir, ${DEST_DIR}" ; exit 1 ; }
 	echo "Installing to ${DEST_DIR}..."
-	rsync -aH --delete "${BASEDIR}/install/${NAME}"/ "${DEST_DIR}"
+	rsync -aH --delete "${INSTALL_DIR}/${NAME}"/ "${DEST_DIR}"
 	cp "${BASEDIR}/version" "${DEST_DIR}/version"
 fi
 
