@@ -549,13 +549,14 @@ then
 	make ${JOBS} && make install_root="${SYSROOT}" install
 
 	# Rebuild binutils with new native compiler
-	mkdir -p "${BUILD_DIR}/binutils-stage2" && cd "${BUILD_DIR}/binutils-stage2"
-	../../src/binutils-gdb/configure --prefix="${PREFIX}" ${TARGETS} --with-sysroot="${SYSROOT}"
-	make -s ${JOBS} && make -s install
+	#mkdir -p "${BUILD_DIR}/binutils-stage2" && cd "${BUILD_DIR}/binutils-stage2"
+	#../../src/binutils-gdb/configure --prefix="${PREFIX}" ${TARGETS} --with-sysroot="${SYSROOT}"
+	#make -s ${JOBS} && make -s install
 
 	# Rebuild GCC with new native compiler
-	mkdir -p "${BUILD_DIR}/gcc-stage2" && cd "${BUILD_DIR}/gcc-stage2"
-	../../src/gcc/configure --prefix="${PREFIX}" ${TARGETS} --enable-languages=c,c++ --disable-multilib --with-long-double-128 --with-sysroot="${SYSROOT}"
+	#mkdir -p "${BUILD_DIR}/gcc-stage2" && cd "${BUILD_DIR}/gcc-stage2"
+	#../../src/gcc/configure --prefix="${PREFIX}" ${TARGETS} --enable-languages=c,c++ --disable-multilib --with-long-double-128 --with-sysroot="${SYSROOT}"
+	cd "${BUILD_DIR}/gcc"
 	make gcc_cv_libc_provides_ssp=yes ${JOBS} && make install
 fi
 
