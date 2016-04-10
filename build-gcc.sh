@@ -304,77 +304,77 @@ else
 	DEST_DIR="${INSTALL}/gcc-${VERSION}-libc-${GLIBC}/${NAME}/"
 fi
 
-## Test that we can talk to both git servers before continuing
-#[[ "$(git ls-remote --tags --heads "${GIT_URL_GCC}" 2>/dev/null)" ]] || ( echo "ERROR: Couldn't contact gcc git server" ; exit 1 )
-#[[ "$(git ls-remote --tags --heads "${GIT_URL_BINUTILS}" 2>/dev/null)" ]] || ( echo "ERROR: Couldn't contact binutils git server" ; exit 1 )
-#
-## Get a list of all tags and branches from the specified git server
-#gitlist=($(git ls-remote --tags --heads "${GIT_URL_GCC}" 2>/dev/null |awk -F "/" '{print $NF}' |sort |uniq))
-#
-## Error if we couldn't get tags or branches from git server
-#if [[ "${#gitlist[*]}" -eq 0 ]]; then
-#	# We didn't find anything
-#	echo "ERROR: Couldn't get anything from the git server at ${GIT_URL_GCC}"
-#	exit 1
-#fi
-#
+# Test that we can talk to both git servers before continuing
+[[ "$(git ls-remote --tags --heads "${GIT_URL_GCC}" 2>/dev/null)" ]] || ( echo "ERROR: Couldn't contact gcc git server" ; exit 1 )
+[[ "$(git ls-remote --tags --heads "${GIT_URL_BINUTILS}" 2>/dev/null)" ]] || ( echo "ERROR: Couldn't contact binutils git server" ; exit 1 )
+
+# Get a list of all tags and branches from the specified git server
+gitlist=($(git ls-remote --tags --heads "${GIT_URL_GCC}" 2>/dev/null |awk -F "/" '{print $NF}' |sort |uniq))
+
+# Error if we couldn't get tags or branches from git server
+if [[ "${#gitlist[*]}" -eq 0 ]]; then
+	# We didn't find anything
+	echo "ERROR: Couldn't get anything from the git server at ${GIT_URL_GCC}"
+	exit 1
+fi
+
 # Check if we have the version specified in either a tag or branch
 # Tags follow format gcc-<version>-release, e.g. gcc-5_1_0-release
-#
-#branch=""
-#for i in "${!gitlist[@]}"; do
-#	# check for tags first
-#	if [[ "${gitlist[i]}" == "gcc-${VERSION//\./_}-release" ]]; then
-#		branch="gcc-${VERSION//\./_}-release"
-#		break
-#		# check for branches next
-#	elif [[ "${gitlist[i]}" == "${VERSION}" ]]; then
-#		branch="${VERSION}"
-#		break
-#		# if local then HEAD, else master
-#	elif [[ "${VERSION}" == "HEAD" ]]; then
-#		if [[ -n "${LOCAL}" ]]; then
-#			branch="${VERSION}"
-#			break
-#		else
-#			branch="master"
-#			break
-#		fi
-#	fi
-#done
-#
-## Else we can't find what we're looking for
-#if [[ -z "${branch}" ]]; then
-#	echo "Could not find the version, ${VERSION}"
-#	if [[ "${GIT_URL_GCC:0:1}" == "/" || "${GIT_URL_GCC:0:1}" == "~" ]]; then
-#		echo "If this is a local repo, you might not have that branch."
-#		echo "Try checking out the branch or use a tag."
-#	fi
-#	exit 1
-#fi
-#
-## Work out which binutils branch to use
-#branch_binutils=""
-#if [[ "${BINUTILS_VERSION}" == "master" ]]; then
-#	branch_binutils="master"
-#elif [[ "${BINUTILS_VERSION}" == "HEAD" ]]; then
-#	if [[ -n "${LOCAL}" ]]; then
-#		branch_binutils="${BINUTILS_VERSION}"
-#	else
-#		branch_binutils="master"
-#	fi
-#else
-#	# Look on binutils git repo
-#	gitlist=($(git ls-remote --heads "${GIT_URL_BINUTILS}" 2>/dev/null |awk -F "/" '{print $NF}' |sort |uniq))
-#	for i in "${!gitlist[@]}"; do
-#		if [[ "${gitlist[i]}" == "binutils-${BINUTILS_VERSION//\./_}-branch" ]]; then
-#			branch_binutils="binutils-${BINUTILS_VERSION//\./_}-branch"
-#			break
-#		fi
-#	done
-#fi
-#
-#[[ ! "${branch_binutils}" ]] && { echo "Can't find a branch with binutils ${BINUTILS_VERSION}" ; exit 1 ; }
+
+branch=""
+for i in "${!gitlist[@]}"; do
+	# check for tags first
+	if [[ "${gitlist[i]}" == "gcc-${VERSION//\./_}-release" ]]; then
+		branch="gcc-${VERSION//\./_}-release"
+		break
+		# check for branches next
+	elif [[ "${gitlist[i]}" == "${VERSION}" ]]; then
+		branch="${VERSION}"
+		break
+		# if local then HEAD, else master
+	elif [[ "${VERSION}" == "HEAD" ]]; then
+		if [[ -n "${LOCAL}" ]]; then
+			branch="${VERSION}"
+			break
+		else
+			branch="master"
+			break
+		fi
+	fi
+done
+
+# Else we can't find what we're looking for
+if [[ -z "${branch}" ]]; then
+	echo "Could not find the version, ${VERSION}"
+	if [[ "${GIT_URL_GCC:0:1}" == "/" || "${GIT_URL_GCC:0:1}" == "~" ]]; then
+		echo "If this is a local repo, you might not have that branch."
+		echo "Try checking out the branch or use a tag."
+	fi
+	exit 1
+fi
+
+# Work out which binutils branch to use
+branch_binutils=""
+if [[ "${BINUTILS_VERSION}" == "master" ]]; then
+	branch_binutils="master"
+elif [[ "${BINUTILS_VERSION}" == "HEAD" ]]; then
+	if [[ -n "${LOCAL}" ]]; then
+		branch_binutils="${BINUTILS_VERSION}"
+	else
+		branch_binutils="master"
+	fi
+else
+	# Look on binutils git repo
+	gitlist=($(git ls-remote --heads "${GIT_URL_BINUTILS}" 2>/dev/null |awk -F "/" '{print $NF}' |sort |uniq))
+	for i in "${!gitlist[@]}"; do
+		if [[ "${gitlist[i]}" == "binutils-${BINUTILS_VERSION//\./_}-branch" ]]; then
+			branch_binutils="binutils-${BINUTILS_VERSION//\./_}-branch"
+			break
+		fi
+	done
+fi
+
+[[ ! "${branch_binutils}" ]] && { echo "Can't find a branch with binutils ${BINUTILS_VERSION}" ; exit 1 ; }
 
 # Warn if we will clean the build and not install it. Don't pause for answer, just let user cancel.
 if [[ "${CLEAN}" == "true" && "${INSTALL}" == "false" ]]; then
@@ -415,35 +415,28 @@ echo -e "\n\"Engage!\"\n"
 # Clone the sources
 cd "${SRC_DIR}"
 
-#if [[ -n "${LOCAL}" ]]; then
-#	echo "Linking existing sources..."
-#	ln -s "${GIT_URL_GCC}" gcc || { echo "Failed to link to existing gcc repo at ${GIT_URL_GCC}" ; exit 1 ; }
-#	ln -s "${GIT_URL_BINUTILS}" binutils-gdb || { echo "Failed to link to existing binutils repo at ${GIT_URL_BINUTILS}" ; exit 1 ; }
-#else
-#	echo "Cloning sources..."
-#	# We have a branch, so let's continue
-#	git clone ${GCC_REFERENCE} -b "${branch}" --depth=1 -q "${GIT_URL_GCC}" 2>/dev/null || { echo "Failed to clone gcc git repo, exiting." ; exit 1 ; } && ( cd gcc; echo -e "\nLatest GCC commit:\n" ; git --no-pager log -1)
-#	# Get binutils
-#	git clone ${BINUTILS_REFERENCE} -b "${branch_binutils}" --depth=1 -q "${GIT_URL_BINUTILS}" || { echo "Failed to clone binutils git repo, exiting." ; exit 1 ; } && ( cd binutils-gdb; echo -e "\nLatest binutils commit:\n" ; git --no-pager log -1 )
-#fi
+if [[ -n "${LOCAL}" ]]; then
+	echo "Linking existing sources..."
+	ln -s "${GIT_URL_GCC}" gcc || { echo "Failed to link to existing gcc repo at ${GIT_URL_GCC}" ; exit 1 ; }
+	ln -s "${GIT_URL_BINUTILS}" binutils-gdb || { echo "Failed to link to existing binutils repo at ${GIT_URL_BINUTILS}" ; exit 1 ; }
+else
+	echo "Cloning sources..."
+	# We have a branch, so let's continue
+	git clone ${GCC_REFERENCE} -b "${branch}" --depth=1 -q "${GIT_URL_GCC}" 2>/dev/null || { echo "Failed to clone gcc git repo, exiting." ; exit 1 ; } && ( cd gcc; echo -e "\nLatest GCC commit:\n" ; git --no-pager log -1)
+	# Get binutils
+	git clone ${BINUTILS_REFERENCE} -b "${branch_binutils}" --depth=1 -q "${GIT_URL_BINUTILS}" || { echo "Failed to clone binutils git repo, exiting." ; exit 1 ; } && ( cd binutils-gdb; echo -e "\nLatest binutils commit:\n" ; git --no-pager log -1 )
+fi
 
+cd "${SRC_DIR}/gcc" && GCC_SHA1="$(git rev-parse HEAD)"
+cd "${SRC_DIR}/binutils-gdb" && BINUTILS_SHA1="$(git rev-parse HEAD)"
+
+#Get version of GCC, according to the repo
+VERSION="$(< "${SRC_DIR}/gcc/gcc/BASE-VER")"
 
 if [[ "${GLIBC}" != "none" ]]; then
 	echo "Getting dependencies for glibc..."
 	# Get deps for libc
 	cd "${SRC_DIR}"
-
-	# gcc
-	mkdir gcc
-	wget http://mirror.aarnet.edu.au/pub/gnu/gcc/gcc-5.3.0/gcc-5.3.0.tar.gz && \
-		tar -xf gcc-5.3.0.tar.gz -C gcc --strip-components 1
-	#Get version of GCC, according to the repo
-	VERSION="$(< "${SRC_DIR}/gcc/gcc/BASE-VER")"
-
-	# binutils
-	mkdir binutils-gdb
-	wget http://mirror.aarnet.edu.au/pub/gnu/binutils/binutils-2.26.tar.gz && \
-		tar -xf binutils-2.26.tar.gz -C binutils-gdb --strip-components 1
 
 	# Linux
 	mkdir linux
@@ -495,13 +488,13 @@ then
 	cd "${SRC_DIR}/linux"
 	make ARCH="${ARCH_LINUX}" INSTALL_HDR_PATH="${SYSROOT}/usr" headers_install
 else
-	mkdir -p ${SYSROOT}
+	mkdir -p "${SYSROOT}"
 fi
 
 # Build binutils
 echo -e "\nBuilding binutils ..."
 mkdir -p "${BUILD_DIR}/binutils" && cd "${BUILD_DIR}/binutils"
-../../src/binutils-gdb/configure --prefix="${PREFIX}" ${TARGETS} --with-sysroot=${SYSROOT}
+../../src/binutils-gdb/configure --prefix="${PREFIX}" ${TARGETS} --with-sysroot="${SYSROOT}"
 
 make -s ${JOBS} && make -s install
 
@@ -512,12 +505,12 @@ mkdir -p "${BUILD_DIR}/gcc" && cd "${BUILD_DIR}/gcc"
 make -s gcc_cv_libc_provides_ssp=yes all-gcc ${JOBS} && make -s install-gcc
 
 # Write gcc and binutils version and git hash to file
-#cat > "${BASEDIR}/version" << EOF
-#GCC_VERSION=${VERSION}
-#GCC_SHA1=${GCC_SHA1}
-#BINUTILS_VERSION=${BINUTILS_VERSION}
-#BINUTILS_SHA1=${BINUTILS_SHA1}
-#EOF
+cat > "${BASEDIR}/version" << EOF
+GCC_VERSION=${VERSION}
+GCC_SHA1=${GCC_SHA1}
+BINUTILS_VERSION=${BINUTILS_VERSION}
+BINUTILS_SHA1=${BINUTILS_SHA1}
+EOF
 
 if [[ "${GLIBC}" != "none" ]];
 then
