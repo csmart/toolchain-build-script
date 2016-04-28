@@ -23,22 +23,24 @@ CLEAN="${CLEAN:-false}"
 INSTALL="${INSTALL:-false}"
 JOBS="${JOBS:--j$(($(nproc) / 4))}"
 LOCAL="${LOCAL:-}"
-BASE_GIT_URL="${BASE_GIT_URL:-git://gitlab.ozlabs.ibm.com/mirror}"
+BASE_GIT_URL="${BASE_GIT_URL:-git://gitlab/mirror}"
 GCC_GIT_URL="${GCC_GIT_URL:-}"
 GCC_REFERENCE="${GCC_REFERENCE:-}"
 GCC_VERSION="${GCC_VERSION:-}"
-GCC_BRANCH="${GCC_BRANCH:-}"
 BINUTILS_GIT_URL="${BINUTILS_GIT_URL:-}"
 BINUTILS_REFERENCE="${BINUTILS_REFERENCE:-}"
 BINUTILS_VERSION="${BINUTILS_VERSION:-2.25}"
-BINUTILS_BRANCH="${BINUTILS_BRANCH:-}"
+BINUTILS_SHA1=""
 GLIBC_GIT_URL="${GLIBC_GIT_URL:-}"
 GLIBC_REFERENCE="${GLIBC_REFERENCE:-}"
-GLIBC_VERSION="${GLIBC_VERSION:-}"
-GLIBC_BRANCH="${GLIBC_BRANCH:-}"
+GLIBC_VERSION="${GLIBC_VERSION:-2.23}"
+
 # No defaults for these
 TARGET="${TARGET:-}"
 ARCH_LINUX="${ARCH_LINUX:-}"
+
+# Internals
+STEP_STATUS=""
 
 #----------
 # FUNCTIONS
@@ -50,55 +52,62 @@ usage() {
 Usage: $0 --version <version> --target <target> [options]
 
 Required args:
---gcc <version>		version of GCC to build, e.g. 5.2.0
+--gcc <version>		version of GCC to build, e.g. ${GCC_VERSION}
 			- Can also be git tag or branch, we look for tags first
 --target <string>	gcc target to build, as supported by gcc
 			- E.g., arm|aarch64|ppc|ppc64|ppc64le|sparc64|x86|x86_64
 
 Options:
---basedir <dir>		directory to use for build
+--basedir <dir>		directory to use for build (build, install, src dirs will be created)
+--binutils <version>	Use this branch for building binutils, defaults to "${BINUTILS_VERSION}"
 --binutils-url <url>	URL to binutils git repo, default git://gitlab/mirror/binutils-gdb.git
 --binutils-ref <dir>	Directory to reference git repo for binutils
---binutils <version>	Use this branch for building binutils, defaults to 2.25
 --clean			delete the build in basedir (consider using with --install)
 --debug			run with set -x
---gcc <version>		URL to gcc git repository, default git://gitlab/mirror/gcc.git
 --gcc-ref <dir>		Directory to reference git repo for gcc
---git-url <url>		URL of git mirror to use, default git://gitlab/mirror
+--gcc-url <url>		URL to gcc git repository, default git://gitlab/mirror/gcc.git
+--glibc <version>	Version of glibc to build, defaults to "${GLIBC_VERSION}", disable with "none"
+--glibc-ref <dir>	Directory to reference git repo for glibc
+--glibc-url <url>	URL of glibc mirror to use, default git://gitlab/mirror/glibc.git
 --install <dir>		install the build to specified dir (consider using with --clean)
 --jobs <num>		number of jobs to pass to make -j, will default to $(($(nproc) / 4))
---local			skips clone and uses gcc repos specified with --gcc and --binutils
---reference <dir>	parent dir for existing repo for clones, e.g. /var/lib/jenkins/git
+--local			skips clone and uses gcc repos specified with --gcc, --glibc, --binutils
+--reference <dir>	dir for existing repo for clones, e.g. /var/lib/jenkins/git
 --help			show this help message
 
 Short Options:
 -b <dir>		Same as --basedir <dir>
 -c			Same as --clean
 -d			Same as --debug
--g <version>		Same as --git <version>
+-g <version>		Same as --gcc <version>
 -i <dir>		Same as --install <dir>
 -j <num>		Same as --jobs <num>
 -l			Same as --local
--r <url>		Same as --reference <dir>
+-r <dir>		Same as --reference <dir>
+-t <string>		Same as --target <string>
 -h			Same as --help
 
 EOF
 	exit 1
 }
 
-# Trap the EXIT call, clean up if required
+# Trap the EXIT call, clean up if required, exit code passed in
 finish() {
+	EXIT_VALUE="${1}"
 	if [[ "${CLEAN}" == "true" ]]; then
 		echo "Cleaning up basedir in ${BASEDIR}"
 		[[ -d "${BASEDIR:?}/build" ]] && rm -rf "${BASEDIR:?}build"
 		[[ -d "${BASEDIR:?}/install" ]] && rm -rf "${BASEDIR:?}/install"
 		[[ -d "${BASEDIR:?}/src" ]] && rm -rf "${BASEDIR:?}/src"
 		[[ -e "${BASEDIR:?}/version" ]] && rm -f "${BASEDIR:?}/version"
-	elif [[ "${BASE}" ]]; then
+	elif [[ -d "${BASEDIR:?}/build" ]]; then
 		echo "Build dir still available under ${BASEDIR}"
 	fi
+	if [[ "${EXIT_VALUE}" -ne 0 && -n "${STEP_STATUS}" ]]; then
+		echo -e "\n${STEP_STATUS^^} FAILED :-(\n"
+	fi
 }
-trap finish EXIT
+trap 'finish $?' EXIT
 
 # Countdown to give user a chance to exit
 countdown() {
@@ -116,6 +125,7 @@ print_summary() {
 	echo " * GCC ${GCC_VERSION} for ${NAME}"
 	echo " * From ${GCC_BRANCH} on ${GCC_GIT_URL}"
 	echo " * Using binutils ${BINUTILS_BRANCH}"
+	[[ "${GLIBC_VERSION}" != "none" ]] && echo " * Using glibc ${GLIBC_BRANCH}"
 	if [[ "${INSTALL}" != "false" ]]; then
 		echo -e " * Install to:\n\t${DEST_DIR}"
 	fi
@@ -239,6 +249,7 @@ while true ; do
 			shift 2
 			;;
 		--version|-v)
+			echo "WARNING: --version has been replaced by --gcc"
 			GCC_VERSION="${2}"
 			shift 2
 			;;
@@ -264,7 +275,7 @@ if [[ -z "${GCC_VERSION}" || -z "${TARGET}" ]]; then
 	usage
 fi
 
-# If builddir isn't a full-path, exit
+# If builddir isn't a full-path, use relative
 if [[ "${BASEDIR:0:1}" != "/" ]]; then
 	echo "Basedir is not a full path, using this instead:"
 	echo -e "$(pwd)/${BASEDIR}\n"
@@ -272,19 +283,25 @@ if [[ "${BASEDIR:0:1}" != "/" ]]; then
 fi
 
 # Set the default git urls if they weren't specified
-if [[ -z "${GCC_GIT_URL}" ]];then
-	GCC_GIT_URL="${BASE_GIT_URL}/gcc.git"
-fi
-if [[ -z "${BINUTILS_GIT_URL}" ]];then
-	BINUTILS_GIT_URL="${BASE_GIT_URL}/binutils-gdb.git"
-fi
+[[ "${GCC_GIT_URL}" ]] || GCC_GIT_URL="${BASE_GIT_URL}/gcc.git"
+[[ "${BINUTILS_GIT_URL}" ]] || BINUTILS_GIT_URL="${BASE_GIT_URL}/binutils-gdb.git"
+[[ "${GLIBC_GIT_URL}" ]] || GLIBC_GIT_URL="${BASE_GIT_URL}/glibc.git"
 
-# If local was set, make sure we have a legit directory
+# If local was set, make sure we have legit git repo directories
 if [[ -n "${LOCAL}" ]]; then
-	if [[ ! -d "${GCC_GIT_URL}" || ! -d "${BINUTILS_GIT_URL}" ]]; then
+	if [[ ! -d "${GCC_GIT_URL}" || ! -d "${BINUTILS_GIT_URL}" || ! -d "${GLIBC_GIT_URL}" ]]; then
 		echo "Git repos don't seem to be local directories."
 		exit 1
 	fi
+fi
+
+# Test if we can write to the install directory before we go to the trouble of building everything
+if [[ "${INSTALL}" != "false" &&  ! -d "${INSTALL}" ]]; then
+	echo "ERROR: Install dir doesn't seem to exist at ${INSTALL}"
+	exit 1
+elif [[ "${INSTALL}" != "false" &&  ! -w "${INSTALL}" ]]; then
+	echo "ERROR: Can't write to install dir at ${INSTALL}"
+	exit 1
 fi
 
 # Work out the targets for GCC
@@ -323,28 +340,30 @@ BUILD_DIR="${BASEDIR}/build"
 INSTALL_DIR="${BASEDIR}/install"
 PREFIX="${INSTALL_DIR}/${NAME}"
 SYSROOT="${PREFIX}/sysroot"
-if [[ "${GLIBC_VERSION}" == "" ]]; then
+if [[ "${GLIBC_VERSION}" == "none" ]]; then
 	DEST_DIR="${INSTALL}/gcc-${GCC_VERSION}-nolibc/${NAME}/"
 else
 	DEST_DIR="${INSTALL}/gcc-${GCC_VERSION}-libc-${GLIBC_VERSION}/${NAME}/"
 fi
 
-# Test that we can talk to both git servers before continuing
+# Test that we can talk to git servers before continuing
 [[ "$(git ls-remote --tags --heads "${GCC_GIT_URL}" 2>/dev/null)" ]] || ( echo "ERROR: Couldn't contact gcc git server" ; exit 1 )
 [[ "$(git ls-remote --tags --heads "${BINUTILS_GIT_URL}" 2>/dev/null)" ]] || ( echo "ERROR: Couldn't contact binutils git server" ; exit 1 )
+[[ "$(git ls-remote --tags --heads "${GLIBC_GIT_URL}" 2>/dev/null)" ]] || ( echo "ERROR: Couldn't contact glibc git server" ; exit 1 )
 
-# Get a list of all tags and branches from the specified git server
+# Get a list of all tags and branches from the specified gcc git server
 gitlist=($(git ls-remote --tags --heads "${GCC_GIT_URL}" 2>/dev/null |awk -F "/" '{print $NF}' |sort |uniq))
 
 # Error if we couldn't get tags or branches from git server
 if [[ "${#gitlist[*]}" -eq 0 ]]; then
 	# We didn't find anything
-	echo "ERROR: Couldn't get anything from the git server at ${GCC_GIT_URL}"
+	echo "ERROR: Couldn't get anything from the GCC git server at ${GCC_GIT_URL}"
 	exit 1
 fi
 
 # Check if we have the version specified in either a tag or branch
 # Tags follow format gcc-<version>-release, e.g. gcc-5_1_0-release
+GCC_BRANCH=""
 for i in "${!gitlist[@]}"; do
 	# check for tags first
 	if [[ "${gitlist[i]}" == "gcc-${GCC_VERSION//\./_}-release" ]]; then
@@ -368,7 +387,7 @@ done
 
 # Else we can't find what we're looking for
 if [[ -z "${GCC_BRANCH}" ]]; then
-	echo "Could not find the version, ${GCC_VERSION}"
+	echo "Could not find the GCC version, ${GCC_VERSION}"
 	if [[ "${GIT_URL_GCC:0:1}" == "/" || "${GIT_URL_GCC:0:1}" == "~" ]]; then
 		echo "If this is a local repo, you might not have that branch."
 		echo "Try checking out the branch or use a tag."
@@ -376,7 +395,8 @@ if [[ -z "${GCC_BRANCH}" ]]; then
 	exit 1
 fi
 
-# Work out which binutils branch to use
+# Work out which binutils tag to use
+BINUTILS_BRANCH=""
 if [[ "${BINUTILS_VERSION}" == "master" ]]; then
 	BINUTILS_BRANCH="master"
 elif [[ "${BINUTILS_VERSION}" == "HEAD" ]]; then
@@ -387,16 +407,41 @@ elif [[ "${BINUTILS_VERSION}" == "HEAD" ]]; then
 	fi
 else
 	# Look on binutils git repo
-	gitlist=($(git ls-remote --heads "${BINUTILS_GIT_URL}" 2>/dev/null |awk -F "/" '{print $NF}' |sort |uniq))
+	gitlist=($(git ls-remote --tags "${BINUTILS_GIT_URL}" 2>/dev/null |awk -F "/" '{print $NF}' |sort |uniq))
 	for i in "${!gitlist[@]}"; do
-		if [[ "${gitlist[i]}" == "binutils-${BINUTILS_VERSION//\./_}-branch" ]]; then
-			BINUTILS_BRANCH="binutils-${BINUTILS_VERSION//\./_}-branch"
+		if [[ "${gitlist[i]}" == "binutils-${BINUTILS_VERSION//\./_}" ]]; then
+			BINUTILS_BRANCH="binutils-${BINUTILS_VERSION//\./_}"
 			break
 		fi
 	done
 fi
 
 [[ ! "${BINUTILS_BRANCH}" ]] && { echo "Can't find a branch with binutils ${BINUTILS_VERSION}" ; exit 1 ; }
+
+# Work out which glibc branch or tag to use
+GLIBC_BRANCH=""
+if [[ "${GLIBC_VERSION}" == "none" ]]; then
+	GLIBC_BRANCH="none"
+elif [[ "${GLIBC_VERSION}" == "master" ]]; then
+	GLIBC_BRANCH="master"
+elif [[ "${GLIBC_VERSION}" == "HEAD" ]]; then
+	if [[ -n "${LOCAL}" ]]; then
+		GLIBC_BRANCH="${GLIBC_VERSION}"
+	else
+		GLIBC_BRANCH="master"
+	fi
+else
+	# Look on glibc git repo
+	gitlist=($(git ls-remote --tags "${GLIBC_GIT_URL}" 2>/dev/null |awk -F "/" '{print $NF}' |sort |uniq))
+	for i in "${!gitlist[@]}"; do
+		if [[ "${gitlist[i]}" == "glibc-${GLIBC_VERSION}" ]]; then
+			GLIBC_BRANCH="glibc-${GLIBC_VERSION}"
+			break
+		fi
+	done
+fi
+
+[[ ! "${GLIBC_BRANCH}" ]] && { echo "Can't find a branch with glibc ${GLIBC_VERSION}" ; exit 1 ; }
 
 # Warn if we will clean the build and not install it. Don't pause for answer, just let user cancel.
 if [[ "${CLEAN}" == "true" && "${INSTALL}" == "false" ]]; then
@@ -407,18 +452,8 @@ if [[ "${CLEAN}" == "true" && "${INSTALL}" == "false" ]]; then
 	echo -e "OK, continuing..\n"
 fi
 
-# Test if we can write to the install directory before we go to the trouble of building everything
-if [[ "${INSTALL}" != "false" &&  ! -d "${INSTALL}" ]]; then
-	echo "ERROR: Install dir doesn't seem to exist at ${INSTALL}"
-	exit 1
-elif [[ "${INSTALL}" != "false" &&  ! -w "${INSTALL}" ]]; then
-	echo "ERROR: Can't write to install dir at ${INSTALL}"
-	exit 1
-fi
-
 # Test and make our build directory
 mkdir -p "${BASEDIR}" 2>/dev/null || ( echo "ERROR: Couldn't make the basedir at ${BASEDIR}" ; exit 1 )
-BASE="true"
 cd "${BASEDIR}"
 rm -rf install src build
 mkdir -p install src build/binutils build/gcc
@@ -437,6 +472,8 @@ echo -e "\n\"Engage!\"\n"
 # Clone the sources
 cd "${SRC_DIR}"
 
+STEP_STATUS="getting source"
+
 if [[ -n "${LOCAL}" ]]; then
 	echo "Linking existing sources..."
 	ln -s "${GCC_GIT_URL}" gcc || { echo "Failed to link to existing gcc repo at ${GCC_GIT_URL}" ; exit 1 ; }
@@ -447,28 +484,29 @@ else
 	git clone ${GCC_REFERENCE} -b "${GCC_BRANCH}" --depth=1 -q "${GCC_GIT_URL}" 2>/dev/null || { echo "Failed to clone gcc git repo, exiting." ; exit 1 ; } && ( cd gcc; echo -e "\nLatest GCC commit:\n" ; git --no-pager log -1)
 	# Get binutils
 	git clone ${BINUTILS_REFERENCE} -b "${BINUTILS_BRANCH}" --depth=1 -q "${BINUTILS_GIT_URL}" || { echo "Failed to clone binutils git repo, exiting." ; exit 1 ; } && ( cd binutils-gdb; echo -e "\nLatest binutils commit:\n" ; git --no-pager log -1 )
+	# Get glibc, if building it
+	if [[ "${GLIBC_VERSION}" != "none" ]]; then
+		git clone ${GLIBC_REFERENCE} -b "${GLIBC_BRANCH}" --depth=1 -q "${GLIBC_GIT_URL}" 2>/dev/null || { echo "Failed to clone glibc git repo, exiting." ; exit 1 ; } && ( cd glibc; echo -e "\nLatest GLIBC commit:\n" ; git --no-pager log -1)
+	fi
 fi
 
 cd "${SRC_DIR}/gcc" && GCC_SHA1="$(git rev-parse HEAD)"
 cd "${SRC_DIR}/binutils-gdb" && BINUTILS_SHA1="$(git rev-parse HEAD)"
+[[ "${GLIBC_VERSION}" != "none" ]] && cd "${SRC_DIR}/glibc" && GLIBC_SHA1="$(git rev-parse HEAD)"
 
 #Get version of GCC, according to the repo
 GCC_VERSION="$(< "${SRC_DIR}/gcc/gcc/BASE-VER")"
 
-if [[ "${GLIBC_VERSION}" != "" ]]; then
+# Get deps for libc
+if [[ "${GLIBC_VERSION}" != "none" ]]; then
 	echo "Getting dependencies for glibc..."
-	# Get deps for libc
+
 	cd "${SRC_DIR}"
 
 	# Linux
 	mkdir linux
 	wget https://cdn.kernel.org/pub/linux/kernel/v4.x/linux-4.5.tar.xz && \
 		tar -xf linux-4.5.tar.xz -C linux  --strip-components 1
-
-	# glibc
-	mkdir glibc
-	wget http://mirror.aarnet.edu.au/pub/gnu/glibc/glibc-2.23.tar.gz && \
-		tar -xf glibc-2.23.tar.gz -C glibc --strip-components 1
 
 	# mpfr
 	mkdir mpfr
@@ -502,15 +540,18 @@ if [[ "${GLIBC_VERSION}" != "" ]]; then
 	done
 fi
 
-# Linux headers
-if [[ "${GLIBC_VERSION}" != "" ]];
+STEP_STATUS="build"
+
+# Linux headers are required if we're building glibc
+if [[ "${GLIBC_VERSION}" != "none" ]];
 then
 	# Install Linux headers
 	echo -e "\nInstalling Linux headers ..."
 	cd "${SRC_DIR}/linux"
 	make ARCH="${ARCH_LINUX}" INSTALL_HDR_PATH="${SYSROOT}/usr" headers_install
 else
-	mkdir -p "${SYSROOT}"
+	# GCC will look here for libraries, dir needs to at least exist
+	mkdir -p "${SYSROOT}/usr/include"
 fi
 
 # Build binutils
@@ -524,7 +565,8 @@ make -s ${JOBS} && make -s install
 echo -e "\nBuilding gcc ..."
 mkdir -p "${BUILD_DIR}/gcc" && cd "${BUILD_DIR}/gcc"
 ../../src/gcc/configure --prefix="${PREFIX}" ${TARGETS} --enable-languages=c,c++ --disable-bootstrap --disable-multilib --with-long-double-128 --with-sysroot="${SYSROOT}"
-make -s gcc_cv_libc_provides_ssp=yes all-gcc ${JOBS} && make -s install-gcc
+make -s gcc_cv_libc_provides_ssp=yes all-gcc ${JOBS}
+make -s install-gcc
 
 # Write gcc and binutils version and git hash to file
 cat > "${BASEDIR}/version" << EOF
@@ -534,8 +576,14 @@ BINUTILS_VERSION=${BINUTILS_VERSION}
 BINUTILS_SHA1=${BINUTILS_SHA1}
 EOF
 
-if [[ "${GLIBC_VERSION}" != "" ]];
+if [[ "${GLIBC_VERSION}" != "none" ]];
 then
+	# Write glibc version and git hash to file
+	cat >> "${BASEDIR}/version" << EOF
+	GLIBC_VERSION=${GLIBC_VERSION}
+	GLIBC_SHA1=${GLIBC_SHA1}
+EOF
+
 	# Now that we have a basic GCC and binutils, we can cross compile the rest
 	export CROSS_COMPILE="${NAME}-"
 	export PATH="${PREFIX}/bin/:${PATH}"
@@ -557,11 +605,13 @@ then
 
 	# Build libgcc
 	cd "${BUILD_DIR}/gcc"
-	make ${JOBS} all-target-libgcc && make install-target-libgcc
+	make ${JOBS} all-target-libgcc
+	make install-target-libgcc
 
 	# Build glibc
 	cd "${BUILD_DIR}/glibc"
-	make ${JOBS} && make install_root="${SYSROOT}" install
+	make ${JOBS}
+	make install_root="${SYSROOT}" install
 
 	# Rebuild binutils with new native compiler
 	#mkdir -p "${BUILD_DIR}/binutils-stage2" && cd "${BUILD_DIR}/binutils-stage2"
@@ -572,12 +622,14 @@ then
 	#mkdir -p "${BUILD_DIR}/gcc-stage2" && cd "${BUILD_DIR}/gcc-stage2"
 	#../../src/gcc/configure --prefix="${PREFIX}" ${TARGETS} --enable-languages=c,c++ --disable-multilib --with-long-double-128 --with-sysroot="${SYSROOT}"
 	cd "${BUILD_DIR}/gcc"
-	make gcc_cv_libc_provides_ssp=yes ${JOBS} && make install
+	make gcc_cv_libc_provides_ssp=yes ${JOBS}
+	make install
 fi
 
 # Install if specified
 if [[ "${INSTALL}" != "false" ]]; then
-	mkdir -p "${DEST_DIR}" || { echo "Error: can't write to install dir, ${DEST_DIR}" ; exit 1 ; }
+	STEP_STATUS="install"
+	mkdir -p "${DEST_DIR}" || { echo "Error: can't write to install dir, ${DEST_DIR}" ; exit ; }
 	echo "Installing to ${DEST_DIR}..."
 	rsync -aH --delete "${INSTALL_DIR}/${NAME}"/ "${DEST_DIR}"
 	cp "${BASEDIR}/version" "${DEST_DIR}/version"
@@ -586,3 +638,4 @@ fi
 # Print summary
 echo "We built:"
 print_summary
+
